@@ -87,13 +87,13 @@ docker images qlcode-chat
 本机打包镜像：
 
 ```bash
-docker save qlcode-chat:latest | gzip > qlcode-chat-latest.tar.gz
+docker save qlcode-chat:v0.9.5 | gzip > qlcode-chat-v0.9.5.tar.gz
 ```
 
 上传到服务器：
 
 ```bash
-scp qlcode-chat-latest.tar.gz docker-compose.prod.yaml .env.example root@你的服务器IP:/opt/
+scp qlcode-chat-v0.9.5.tar.gz docker-compose.prod.yaml .env.example root@你的服务器IP:/opt/
 ```
 
 服务器上准备目录：
@@ -101,7 +101,7 @@ scp qlcode-chat-latest.tar.gz docker-compose.prod.yaml .env.example root@你的�
 ```bash
 ssh root@你的服务器IP
 mkdir -p /opt/qlcode-chat
-mv /opt/qlcode-chat-latest.tar.gz /opt/qlcode-chat/
+mv /opt/qlcode-chat-v0.9.5.tar.gz /opt/qlcode-chat/
 mv /opt/docker-compose.prod.yaml /opt/qlcode-chat/docker-compose.yaml
 mv /opt/.env.example /opt/qlcode-chat/.env
 cd /opt/qlcode-chat
@@ -110,7 +110,7 @@ cd /opt/qlcode-chat
 服务器加载镜像：
 
 ```bash
-docker load < qlcode-chat-latest.tar.gz
+docker load < qlcode-chat-v0.9.5.tar.gz
 ```
 
 生成正式密钥并写入 `.env`：
@@ -124,6 +124,7 @@ nano .env
 
 ```env
 QLCODE_CHAT_SECRET_KEY=替换成上一步生成的长随机值
+QLCODE_CHAT_DOCKER_TAG=v0.9.5
 QLCODE_CHAT_PORT=3000
 CORS_ALLOW_ORIGIN=https://你的正式域名
 ```
@@ -176,18 +177,19 @@ CORS_ALLOW_ORIGIN=https://chat.example.com
 
 ```bash
 docker compose build qlcode-chat
-docker tag qlcode-chat:latest qlcode-chat:$(date +%Y%m%d-%H%M)
-docker save qlcode-chat:latest | gzip > qlcode-chat-latest.tar.gz
+docker tag qlcode-chat:v0.9.5 qlcode-chat:v0.9.6
+docker save qlcode-chat:v0.9.6 | gzip > qlcode-chat-v0.9.6.tar.gz
 ```
 
 上传并替换服务器镜像：
 
 ```bash
-scp qlcode-chat-latest.tar.gz root@你的服务器IP:/opt/qlcode-chat/
+scp qlcode-chat-v0.9.6.tar.gz root@你的服务器IP:/opt/qlcode-chat/
 ssh root@你的服务器IP
 cd /opt/qlcode-chat
 docker compose down
-docker load < qlcode-chat-latest.tar.gz
+docker load < qlcode-chat-v0.9.6.tar.gz
+sed -i 's/^QLCODE_CHAT_DOCKER_TAG=.*/QLCODE_CHAT_DOCKER_TAG=v0.9.6/' .env
 docker compose up -d
 ```
 

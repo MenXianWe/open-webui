@@ -15,7 +15,7 @@ services:
         https_proxy: ${HTTPS_PROXY:-}
         all_proxy: ${ALL_PROXY:-}
         no_proxy: ${NO_PROXY:-localhost,127.0.0.1}
-    image: qlcode-chat:${QLCODE_CHAT_DOCKER_TAG-latest}
+    image: qlcode-chat:${QLCODE_CHAT_DOCKER_TAG:-v0.9.5}
     container_name: qlcode-chat
     volumes:
       - qlcode-chat:/app/backend/data

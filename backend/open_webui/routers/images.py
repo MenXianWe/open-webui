@@ -30,8 +30,10 @@ from open_webui.utils.headers import include_user_info_headers
 from open_webui.utils.qlcode import (
     QLCODE_API_BASE_URL,
     QLCODE_IMAGE_GENERATION_MODEL,
+    QLCODE_IMAGE_MODEL_MISSING_DETAIL,
     QLCODE_IMAGE_GENERATION_SIZE,
     get_required_user_qlcode_api_key,
+    qlcode_models_include,
     qlcode_api_headers,
     qlcode_error_detail,
 )
@@ -349,6 +351,20 @@ async def get_models(request: Request, user=Depends(get_verified_user)):
     return [{'id': QLCODE_IMAGE_GENERATION_MODEL, 'name': 'GPT-IMAGE 2'}]
 
 
+async def ensure_user_has_image_model(session, api_key: str):
+    async with session.get(
+        url=f'{QLCODE_API_BASE_URL}/models',
+        headers=qlcode_api_headers(api_key),
+        ssl=AIOHTTP_CLIENT_SESSION_SSL,
+    ) as r:
+        if r.status >= 400:
+            raise HTTPException(status_code=r.status, detail=await qlcode_error_detail(r))
+        models_payload = await r.json()
+
+    if not qlcode_models_include(models_payload, QLCODE_IMAGE_GENERATION_MODEL):
+        raise HTTPException(status_code=403, detail=QLCODE_IMAGE_MODEL_MISSING_DETAIL)
+
+
 class CreateImageForm(BaseModel):
     model: Optional[str] = None
     prompt: str
@@ -473,6 +489,7 @@ async def image_generations(
         }
 
         session = await get_session()
+        await ensure_user_has_image_model(session, qlcode_api_key)
         async with session.post(
             url=f'{QLCODE_API_BASE_URL}/images/generations',
             json=data,
@@ -645,6 +662,7 @@ async def image_edits(
             )
 
         session = await get_session()
+        await ensure_user_has_image_model(session, qlcode_api_key)
         async with session.post(
             url=f'{QLCODE_API_BASE_URL}/images/edits',
             headers=headers,

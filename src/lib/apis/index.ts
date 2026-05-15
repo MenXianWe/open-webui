@@ -1,8 +1,9 @@
-import { WEBUI_BASE_URL } from '$lib/constants';
+import { QLCODE_VISIBLE_CHAT_MODEL_IDS, WEBUI_BASE_URL } from '$lib/constants';
 import { convertOpenApiToToolPayload } from '$lib/utils';
 import { getOpenAIModelsDirect } from './openai';
 
 const TOOL_SERVER_FETCH_TIMEOUT = 10000;
+const QLCODE_VISIBLE_CHAT_MODEL_ID_SET = new Set(QLCODE_VISIBLE_CHAT_MODEL_IDS);
 
 // Valid HTTP methods per OpenAPI 3.x – used to skip extension keys (x-*)
 // and non-operation path-item fields (summary, description, servers, parameters).
@@ -169,7 +170,9 @@ export const getModels = async (
 		models = Object.values(modelsMap);
 	}
 
-	return models;
+	return base
+		? models
+		: models.filter((model) => QLCODE_VISIBLE_CHAT_MODEL_ID_SET.has(String(model?.id ?? '')));
 };
 
 export const unloadModel = async (token: string, model: string) => {

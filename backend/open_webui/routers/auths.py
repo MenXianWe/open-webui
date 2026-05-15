@@ -503,7 +503,7 @@ async def ldap_auth(
                         email=email,
                         password=str(uuid.uuid4()),
                         name=cn,
-                        role=request.app.state.config.DEFAULT_USER_ROLE,
+                        role='user',
                         db=db,
                     )
 
@@ -706,7 +706,7 @@ async def signup_handler(
         password=hashed,
         name=name,
         profile_image_url=profile_image_url,
-        role=request.app.state.config.DEFAULT_USER_ROLE,
+        role='user',
         db=db,
     )
     if not user:

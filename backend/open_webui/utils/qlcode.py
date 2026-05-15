@@ -2,8 +2,54 @@ import aiohttp
 from fastapi import HTTPException, status
 
 QLCODE_API_BASE_URL = 'https://api.qlcodeapi.com/v1'
+QLCODE_CHAT_MODEL_IDS = ('gpt-5.5', 'gpt-5.4')
 QLCODE_IMAGE_GENERATION_MODEL = 'gpt-image-2'
 QLCODE_IMAGE_GENERATION_SIZE = '1024x1024'
+QLCODE_IMAGE_MODEL_MISSING_DETAIL = (
+    '当前 QLCodeAPI 密钥未开通图片模型 gpt-image-2。'
+    '请在 QLCodeAPI 控制台确认该密钥包含图片生成模型权限后再生成图片。'
+)
+
+
+def get_model_id(model) -> str:
+    if isinstance(model, dict):
+        return str(model.get('id') or model.get('model') or '').strip()
+    return str(getattr(model, 'id', '') or getattr(model, 'model', '') or '').strip()
+
+
+def is_qlcode_chat_model(model_id: str) -> bool:
+    return str(model_id or '').strip() in QLCODE_CHAT_MODEL_IDS
+
+
+def filter_qlcode_chat_models(models):
+    return [model for model in (models or []) if is_qlcode_chat_model(get_model_id(model))]
+
+
+def filter_qlcode_chat_models_response(payload):
+    if isinstance(payload, dict):
+        data = payload.get('data')
+        if isinstance(data, list):
+            return {**payload, 'data': filter_qlcode_chat_models(data)}
+        models = payload.get('models')
+        if isinstance(models, list):
+            return {**payload, 'models': filter_qlcode_chat_models(models)}
+        return payload
+    if isinstance(payload, list):
+        return filter_qlcode_chat_models(payload)
+    return payload
+
+
+def qlcode_models_include(payload, model_id: str) -> bool:
+    if isinstance(payload, dict):
+        candidates = payload.get('data')
+        if not isinstance(candidates, list):
+            candidates = payload.get('models')
+    elif isinstance(payload, list):
+        candidates = payload
+    else:
+        candidates = []
+
+    return any(get_model_id(model) == model_id for model in (candidates or []))
 
 
 def settings_to_dict(settings) -> dict:

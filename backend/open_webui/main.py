@@ -66,6 +66,7 @@ from open_webui.utils.asgi_middleware import (
 from open_webui.utils.audit import AuditLevel, AuditLoggingMiddleware
 from open_webui.utils.logger import start_logger
 from open_webui.utils.session_pool import get_session
+from open_webui.utils.qlcode import filter_qlcode_chat_models
 from open_webui.socket.main import (
     MODELS,
     app as socket_app,
@@ -1511,6 +1512,7 @@ async def get_models(request: Request, refresh: bool = False, user=Depends(get_v
         )
 
     models = await get_filtered_models(models, user)
+    models = filter_qlcode_chat_models(models)
 
     log.debug(
         f'/api/models returned filtered models accessible to the user: {json.dumps([model.get("id") for model in models])}'

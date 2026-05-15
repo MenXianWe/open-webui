@@ -10,7 +10,10 @@ QLCodeChat 是 QLCode 的私有 AI 对话应用，面向 QLCodeAPI 使用场景�
 - 品牌官网：https://qlcodeapi.com/
 - 用户侧 API 地址固定为：https://api.qlcodeapi.com/v1
 - 用户只需要填写自己的 QLCodeAPI 密钥，不需要选择或修改服务商地址
+- 用户侧模型选择器只展示 `gpt-5.5` 和 `gpt-5.4`
 - 图片生成默认使用用户自己的密钥，并固定使用 `gpt-image-2`
+- 如果用户密钥没有 `gpt-image-2` 权限，图片生成会给出明确提示
+- 新注册用户默认是普通用户，不需要管理员审核
 - 对话模型在用户界面以 `QL` 展示
 - 容器内应用监听 `8080`，宿主机默认映射为 `3000`
 
@@ -87,13 +90,13 @@ docker images qlcode-chat
 本机打包镜像：
 
 ```bash
-docker save qlcode-chat:v0.9.5 | gzip > qlcode-chat-v0.9.5.tar.gz
+docker save qlcode-chat:v0.9.6 | gzip > qlcode-chat-v0.9.6.tar.gz
 ```
 
 上传到服务器：
 
 ```bash
-scp qlcode-chat-v0.9.5.tar.gz docker-compose.prod.yaml .env.example root@你的服务器IP:/opt/
+scp qlcode-chat-v0.9.6.tar.gz docker-compose.prod.yaml .env.example root@你的服务器IP:/opt/
 ```
 
 服务器上准备目录：
@@ -101,7 +104,7 @@ scp qlcode-chat-v0.9.5.tar.gz docker-compose.prod.yaml .env.example root@你的�
 ```bash
 ssh root@你的服务器IP
 mkdir -p /opt/qlcode-chat
-mv /opt/qlcode-chat-v0.9.5.tar.gz /opt/qlcode-chat/
+mv /opt/qlcode-chat-v0.9.6.tar.gz /opt/qlcode-chat/
 mv /opt/docker-compose.prod.yaml /opt/qlcode-chat/docker-compose.yaml
 mv /opt/.env.example /opt/qlcode-chat/.env
 cd /opt/qlcode-chat
@@ -110,7 +113,7 @@ cd /opt/qlcode-chat
 服务器加载镜像：
 
 ```bash
-docker load < qlcode-chat-v0.9.5.tar.gz
+docker load < qlcode-chat-v0.9.6.tar.gz
 ```
 
 生成正式密钥并写入 `.env`：
@@ -124,7 +127,7 @@ nano .env
 
 ```env
 QLCODE_CHAT_SECRET_KEY=替换成上一步生成的长随机值
-QLCODE_CHAT_DOCKER_TAG=v0.9.5
+QLCODE_CHAT_DOCKER_TAG=v0.9.6
 QLCODE_CHAT_PORT=3000
 CORS_ALLOW_ORIGIN=https://你的正式域名
 ```

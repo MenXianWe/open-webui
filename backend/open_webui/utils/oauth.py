@@ -1226,7 +1226,7 @@ class OAuthManager:
             # default role here (not 'admin') — admin promotion happens
             # race-safely *after* insert via get_num_users() == 1.
             log.debug('First user bootstrap: using default role (admin promotion deferred to post-insert)')
-            return auth_manager_config.DEFAULT_USER_ROLE
+            return 'user'
 
         if auth_manager_config.ENABLE_OAUTH_ROLE_MANAGEMENT:
             log.debug('Running OAUTH Role management')
@@ -1235,7 +1235,7 @@ class OAuthManager:
             oauth_admin_roles = auth_manager_config.OAUTH_ADMIN_ROLES
             oauth_roles = []
             # Default/fallback role if no matching roles are found
-            role = auth_manager_config.DEFAULT_USER_ROLE
+            role = 'user'
 
             # Next block extracts the roles from the user data, accepting nested claims of any depth
             if oauth_claim and oauth_allowed_roles and oauth_admin_roles:
@@ -1293,7 +1293,7 @@ class OAuthManager:
         else:
             if not user:
                 # If role management is disabled, use the default role for new users
-                role = auth_manager_config.DEFAULT_USER_ROLE
+                role = 'user'
             else:
                 # If role management is disabled, use the existing role for existing users
                 role = user.role

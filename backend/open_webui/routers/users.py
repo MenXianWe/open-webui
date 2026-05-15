@@ -52,6 +52,9 @@ from open_webui.utils.auth import (
 from open_webui.utils.access_control import get_permissions, has_permission
 from open_webui.utils.qlcode import (
     QLCODE_API_BASE_URL,
+    QLCODE_CHAT_MODEL_IDS,
+    filter_qlcode_chat_models_response,
+    is_qlcode_chat_model,
     normalize_user_direct_connections,
     qlcode_api_headers,
     qlcode_error_detail,
@@ -505,7 +508,7 @@ async def get_user_direct_models(form_data: QLCodeDirectAPIKeyForm, user=Depends
                         status_code=response.status,
                         detail=await qlcode_error_detail(response),
                     )
-                return await response.json()
+                return filter_qlcode_chat_models_response(await response.json())
     except HTTPException:
         raise
     except Exception as e:
@@ -522,6 +525,13 @@ async def create_user_direct_chat_completion(
     user=Depends(get_verified_user),
 ):
     api_key = validate_qlcode_api_key(form_data.api_key)
+    requested_model = str((form_data.payload or {}).get('model') or '').strip()
+    if requested_model and not is_qlcode_chat_model(requested_model):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'QLCodeChat 当前只支持这些对话模型：{", ".join(QLCODE_CHAT_MODEL_IDS)}。',
+        )
+
     timeout = aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
     session = aiohttp.ClientSession(timeout=timeout, trust_env=True)
 

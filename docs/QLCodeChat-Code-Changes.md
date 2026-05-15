@@ -5,8 +5,8 @@
 当前定制版本：
 
 ```text
-QLCodeChat v0.9.5
-Docker image: qlcode-chat:v0.9.5
+QLCodeChat v0.9.6
+Docker image: qlcode-chat:v0.9.6
 Base branch: main
 Production branch: qlcode-chat-production
 ```
@@ -24,7 +24,7 @@ Production branch: qlcode-chat-production
 
 - `package.json`
   - 包名改为 `qlcode-chat`。
-  - 版本保持为 `0.9.5`，作为 Docker 镜像版本标签来源。
+  - 版本保持为 `0.9.6`，作为 Docker 镜像版本标签来源。
 - `src/lib/constants.ts`
   - 新增并集中维护品牌常量：
     - `APP_NAME = 'QLCodeChat'`
@@ -90,6 +90,7 @@ Production branch: qlcode-chat-production
 - `backend/open_webui/utils/qlcode.py`
   - 新增 QLCodeAPI 统一工具模块。
   - 固定基础地址：`https://api.qlcodeapi.com/v1`。
+  - 固定用户侧可见对话模型白名单：`gpt-5.5`、`gpt-5.4`。
   - 提供用户密钥读取函数：
     - 从用户设置的 direct connection 中读取 QLCodeAPI key。
     - 如果旧数据存在多个连接，会提取并归一化到 QLCodeAPI 固定连接。
@@ -109,7 +110,13 @@ Production branch: qlcode-chat-production
 - `backend/open_webui/routers/users.py`
   - 增加用户侧 direct connection 的规范化处理。
   - 增加用户 QLCodeAPI 模型和聊天代理相关接口。
+  - 用户直连模型列表只返回 `gpt-5.5` 和 `gpt-5.4`。
+  - 用户直连聊天请求会拒绝白名单外的模型，避免前端隐藏被绕过。
   - 用户保存设置时保持 QLCodeAPI 地址固定。
+- `backend/open_webui/main.py`
+  - `/api/models` 返回用户可用模型前增加 QLCodeChat 白名单过滤，左上角模型选择器只展示 `gpt-5.5` 和 `gpt-5.4`。
+- `src/lib/apis/index.ts`
+  - 前端模型列表再做一层白名单过滤，防止直接连接或旧缓存把其他模型带回选择器。
 
 ## 4. 图片生成与图片编辑
 
@@ -146,6 +153,7 @@ Production branch: qlcode-chat-production
     - 固定模型为 `gpt-image-2`。
     - 保留 multipart 图片编辑请求能力。
   - 错误处理改为尽量返回 QLCodeAPI 的原始错误详情，便于用户定位密钥或额度问题。
+  - 图片生成和图片编辑前会读取用户密钥可用模型；如果密钥未开通 `gpt-image-2`，返回明确提示。
 - `src/lib/apis/images/index.ts`
   - 图片编辑请求体结构调整为后端新接口需要的格式。
 - `backend/open_webui/config.py`
@@ -263,7 +271,7 @@ Production branch: qlcode-chat-production
 
 - `src/lib/components/chat/Settings/About.svelte`
   - 文案调整为：
-    - 当前版本：`0.9.5`
+    - 当前版本：`0.9.6`
     - 作者：`晴朗`
     - 联系方式：`qlcodeapi@qq.com`
   - 版本检查相关显示逻辑调整为当前版本口径。
@@ -297,6 +305,21 @@ Production branch: qlcode-chat-production
 - `backend/start.sh`
   - 启动提示文案改为 QLCodeChat。
 
+### 注册默认角色
+
+目标：
+
+- 新注册用户默认成为普通用户，避免进入待审核状态。
+
+主要改动：
+
+- `backend/open_webui/config.py`
+  - `DEFAULT_USER_ROLE` 默认值从 `pending` 调整为 `user`。
+- `backend/open_webui/routers/auths.py`
+  - 普通注册和 LDAP 自动创建用户时，写入角色固定为 `user`。
+- `backend/open_webui/utils/oauth.py`
+  - OAuth 新用户无角色匹配时默认写入 `user`。
+
 ## 11. Docker 构建与运行配置
 
 目标：
@@ -317,7 +340,7 @@ Production branch: qlcode-chat-production
   - 镜像默认标签改为：
 
     ```text
-    qlcode-chat:v0.9.5
+    qlcode-chat:v0.9.6
     ```
 
   - 添加构建代理参数，便于本地网络较慢时构建。
@@ -328,7 +351,7 @@ Production branch: qlcode-chat-production
   - 通过 `.env` 控制端口、版本号、密钥、CORS。
 - `.env.example`
   - 新增 QLCodeChat 服务器运行环境变量模板：
-    - `QLCODE_CHAT_DOCKER_TAG=v0.9.5`
+    - `QLCODE_CHAT_DOCKER_TAG=v0.9.6`
     - `QLCODE_CHAT_PORT=3000`
     - `QLCODE_CHAT_SECRET_KEY`
     - `CORS_ALLOW_ORIGIN`
@@ -358,33 +381,34 @@ Production branch: qlcode-chat-production
 
 ## 13. 验证情况
 
-已经执行过的验证：
+v0.9.6 已执行过的验证：
+
+- `PYTHONPATH=backend .venv/bin/python -m py_compile ...`
+  - 本次涉及的后端文件语法检查通过。
+- QLCode 模型过滤和图片模型判断辅助函数检查通过。
+- `git diff --check`
+  - 本次 diff 无空白格式问题。
+- `npm run build`
+  - 本地执行超过二十分钟后中止；过程中只看到项目既有 Svelte 警告，未得到完整构建结论。
+- `npx eslint src/lib/apis/index.ts src/lib/constants.ts`
+  - 未通过，原因是 `src/lib/apis/index.ts` 内已有多处未使用变量和 `any` 类型等历史 lint 问题；本次变更行未引入新的语法错误。
+
+v0.9.5 历史部署包已执行过的验证：
 
 - `npm run build`
   - 前端构建通过。
 - `docker compose build qlcode-chat`
   - Docker 镜像构建完成。
-- `docker tag qlcode-chat:v0.9.5`
-  - 镜像版本号标签已生成。
 - `docker compose up -d qlcode-chat`
-  - 本地容器运行成功。
-- `curl http://127.0.0.1:3000/health`
-  - 健康检查返回：
-
-    ```json
-    {"status":true}
-    ```
-
+  - 本地容器运行成功，健康检查返回 `{"status":true}`。
 - `docker compose -f docker-compose.prod.yaml --env-file .env.example config`
   - 生产 compose 配置校验通过。
-- `gzip -t`
+- `gzip -t`、`sha256sum -c SHA256SUMS`
   - 镜像压缩包和 release 总包完整性校验通过。
-- `sha256sum -c SHA256SUMS`
-  - release 包内文件校验通过。
 
 ## 14. 后续维护注意事项
 
-- 后续发版不要复用旧 Docker 标签，应使用新版本号，例如 `v0.9.6`。
+- 后续发版不要复用旧 Docker 标签，应使用新版本号，例如 `v0.9.7`。
 - 用户侧 API 地址应继续只从 `backend/open_webui/utils/qlcode.py` 和 `src/lib/constants.ts` 的 QLCode 常量派生，避免散落硬编码。
 - 图片生成和聊天代理都依赖用户自己的 QLCodeAPI key，相关错误优先检查用户连接设置。
 - 如果新增登录页视觉素材，应同时放入前端静态目录和后端静态目录，保证 Docker 构建后资源路径一致。

@@ -66,6 +66,20 @@ def user_settings_to_dict(user) -> dict:
     return settings_to_dict(getattr(user, 'settings', None))
 
 
+def disable_update_ui_settings(settings_data: dict) -> dict:
+    settings_data = dict(settings_data or {})
+    ui_settings = settings_data.get('ui')
+    if not isinstance(ui_settings, dict):
+        ui_settings = {}
+    else:
+        ui_settings = dict(ui_settings)
+
+    ui_settings['showChangelog'] = False
+    ui_settings['showUpdateToast'] = False
+    settings_data['ui'] = ui_settings
+    return settings_data
+
+
 def get_user_qlcode_api_key(user) -> str:
     settings = user_settings_to_dict(user)
     ui_settings = settings.get('ui') if isinstance(settings, dict) else None
@@ -122,7 +136,7 @@ async def qlcode_error_detail(response: aiohttp.ClientResponse):
 
 
 def normalize_user_direct_connections(settings):
-    settings_data = settings_to_dict(settings)
+    settings_data = disable_update_ui_settings(settings_to_dict(settings))
     ui_settings = settings_data.get('ui')
     if not isinstance(ui_settings, dict) or 'directConnections' not in ui_settings:
         return settings_data

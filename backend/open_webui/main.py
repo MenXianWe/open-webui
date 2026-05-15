@@ -496,7 +496,6 @@ from open_webui.env import (
     AUDIT_INCLUDED_PATHS,
     ENABLE_AUDIT_GET_REQUESTS,
     AUDIT_LOG_LEVEL,
-    CHANGELOG,
     REDIS_URL,
     REDIS_CLUSTER,
     REDIS_KEY_PREFIX,
@@ -2498,7 +2497,7 @@ async def get_app_latest_release_version(user=Depends(get_verified_user)):
 
 @app.get('/api/changelog')
 async def get_app_changelog():
-    return {key: CHANGELOG[key] for idx, key in enumerate(CHANGELOG) if idx < 5}
+    return {}
 
 
 @app.get('/api/usage')

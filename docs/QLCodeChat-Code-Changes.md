@@ -5,8 +5,8 @@
 当前定制版本：
 
 ```text
-QLCodeChat v0.9.6
-Docker image: qlcode-chat:v0.9.6
+QLCodeChat v0.9.7
+Docker image: qlcode-chat:v0.9.7
 Base branch: main
 Production branch: qlcode-chat-production
 ```
@@ -24,7 +24,7 @@ Production branch: qlcode-chat-production
 
 - `package.json`
   - 包名改为 `qlcode-chat`。
-  - 版本保持为 `0.9.6`，作为 Docker 镜像版本标签来源。
+  - 版本保持为 `0.9.7`，作为 Docker 镜像版本标签来源。
 - `src/lib/constants.ts`
   - 新增并集中维护品牌常量：
     - `APP_NAME = 'QLCodeChat'`
@@ -271,14 +271,33 @@ Production branch: qlcode-chat-production
 
 - `src/lib/components/chat/Settings/About.svelte`
   - 文案调整为：
-    - 当前版本：`0.9.6`
+    - 当前版本：`0.9.7`
     - 作者：`晴朗`
     - 联系方式：`qlcodeapi@qq.com`
   - 版本检查相关显示逻辑调整为当前版本口径。
 - `backend/open_webui/main.py`
   - `/api/version/updates` 返回当前版本作为 latest，避免用户侧看到远程更新提示。
+  - `/api/changelog` 返回空内容，避免前端或第三方入口读取更新日志。
 - `backend/open_webui/env.py`
-  - 默认关闭或弱化远程版本更新检查相关行为。
+  - 固定关闭远程版本更新检查相关行为。
+  - 移除运行时更新日志解析逻辑，不再从 `CHANGELOG.md` 读取更新内容。
+- `src/routes/(app)/+layout.svelte`
+  - 移除管理员登录后的“最近更新内容”弹窗挂载和触发逻辑。
+  - 移除更新提示 toast 的检查和渲染逻辑。
+- `src/lib/components/admin/Settings/General.svelte`
+  - 管理设置中只保留当前版本号，不再显示“检查更新”“查看更新内容”“latest/available”等状态。
+- `src/lib/components/chat/Settings/Interface.svelte`
+  - 移除“更新 toast”和“登录显示 What's New 弹窗”的用户设置开关。
+- `src/lib/components/ChangelogModal.svelte`
+  - 删除更新日志弹窗组件。
+- `CHANGELOG.md`
+  - 删除镜像和源码包中不再需要的更新日志文件。
+- `Dockerfile`、`pyproject.toml`
+  - 移除更新日志文件的镜像复制和 Python 包强制包含配置。
+- `cypress/support/e2e.ts`、`cypress/e2e/registration.cy.ts`
+  - 移除测试中针对更新日志弹窗的兼容点击逻辑。
+- `backend/open_webui/utils/qlcode.py`
+  - 用户设置读取/保存时强制关闭 `showChangelog` 和 `showUpdateToast`，兼容旧管理员账号已有设置。
 
 ## 10. 后端品牌化与运行行为
 
@@ -340,7 +359,7 @@ Production branch: qlcode-chat-production
   - 镜像默认标签改为：
 
     ```text
-    qlcode-chat:v0.9.6
+    qlcode-chat:v0.9.7
     ```
 
   - 添加构建代理参数，便于本地网络较慢时构建。
@@ -351,7 +370,7 @@ Production branch: qlcode-chat-production
   - 通过 `.env` 控制端口、版本号、密钥、CORS。
 - `.env.example`
   - 新增 QLCodeChat 服务器运行环境变量模板：
-    - `QLCODE_CHAT_DOCKER_TAG=v0.9.6`
+    - `QLCODE_CHAT_DOCKER_TAG=v0.9.7`
     - `QLCODE_CHAT_PORT=3000`
     - `QLCODE_CHAT_SECRET_KEY`
     - `CORS_ALLOW_ORIGIN`
@@ -381,17 +400,19 @@ Production branch: qlcode-chat-production
 
 ## 13. 验证情况
 
-v0.9.6 已执行过的验证：
+v0.9.7 已执行过的验证：
 
 - `PYTHONPATH=backend .venv/bin/python -m py_compile ...`
   - 本次涉及的后端文件语法检查通过。
 - QLCode 模型过滤和图片模型判断辅助函数检查通过。
 - `git diff --check`
   - 本次 diff 无空白格式问题。
+- `rg ... Changelog/UpdateInfoToast/showChangelog/showUpdateToast/getVersionUpdates`
+  - 前端运行代码中已无更新弹窗、更新 toast、更新日志 API 调用入口；后端仅保留返回空内容/当前版本的兼容接口和旧设置强制关闭逻辑。
 - `npm run build`
   - 本地执行超过二十分钟后中止；过程中只看到项目既有 Svelte 警告，未得到完整构建结论。
-- `npx eslint src/lib/apis/index.ts src/lib/constants.ts`
-  - 未通过，原因是 `src/lib/apis/index.ts` 内已有多处未使用变量和 `any` 类型等历史 lint 问题；本次变更行未引入新的语法错误。
+- `npx eslint ...`
+  - 未通过，原因是 `src/lib/apis/index.ts`、`src/lib/stores/index.ts`、部分 Svelte 组件内已有多处 `any`、a11y 和未使用 CSS 选择器等历史 lint 问题；本次变更未留下更新弹窗相关的未使用导入。
 
 v0.9.5 历史部署包已执行过的验证：
 
@@ -408,7 +429,7 @@ v0.9.5 历史部署包已执行过的验证：
 
 ## 14. 后续维护注意事项
 
-- 后续发版不要复用旧 Docker 标签，应使用新版本号，例如 `v0.9.7`。
+- 后续发版不要复用旧 Docker 标签，应使用新版本号，例如 `v0.9.8`。
 - 用户侧 API 地址应继续只从 `backend/open_webui/utils/qlcode.py` 和 `src/lib/constants.ts` 的 QLCode 常量派生，避免散落硬编码。
 - 图片生成和聊天代理都依赖用户自己的 QLCodeAPI key，相关错误优先检查用户连接设置。
 - 如果新增登录页视觉素材，应同时放入前端静态目录和后端静态目录，保证 Docker 构建后资源路径一致。

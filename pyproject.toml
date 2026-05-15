@@ -202,7 +202,7 @@ exclude = [
     "qlcode-chat.db",
     "chroma.sqlite3",
 ]
-force-include = { "CHANGELOG.md" = "open_webui/CHANGELOG.md", build = "open_webui/frontend" }
+force-include = { build = "open_webui/frontend" }
 
 [tool.codespell]
 # Ref: https://github.com/codespell-project/codespell#using-a-config-file

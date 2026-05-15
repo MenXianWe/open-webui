@@ -1,11 +1,20 @@
 import { browser, dev } from '$app/environment';
 // import { version } from '../../package.json';
 
-export const APP_NAME = 'Open WebUI';
+export const APP_NAME = 'QLCodeChat';
+export const CHAT_ASSISTANT_DISPLAY_NAME = 'QL';
+export const QLCODE_API_BASE_URL = 'https://api.qlcodeapi.com/v1';
+export const QLCODE_API_PORTAL_URL = 'https://api.qlcodeapi.com/';
 
 export const WEBUI_HOSTNAME = browser ? (dev ? `${location.hostname}:8080` : ``) : '';
 export const WEBUI_BASE_URL = browser ? (dev ? `http://${WEBUI_HOSTNAME}` : ``) : ``;
 export const WEBUI_API_BASE_URL = `${WEBUI_BASE_URL}/api/v1`;
+export const WEBUI_BRAND_LOGO_URL = `${WEBUI_BASE_URL}/static/qlcode-login/app-logo.webp`;
+export const WEBUI_DEFAULT_USER_IMAGE_URL = `${WEBUI_BASE_URL}/static/user.png`;
+export const WEBUI_DEFAULT_USER_PROFILE_IMAGE_VALUE = '/user.png';
+export const QLCODE_LOGIN_APP_LOGO_URL = `${WEBUI_BASE_URL}/static/qlcode-login/app-logo.webp`;
+export const QLCODE_LOGIN_WORDMARK_URL = `${WEBUI_BASE_URL}/static/qlcode-login/brand-wordmark.webp`;
+export const QLCODE_LOGIN_HERO_VISUAL_URL = `${WEBUI_BASE_URL}/static/qlcode-login/hero-visual.webp`;
 
 export const OLLAMA_API_BASE_URL = `${WEBUI_BASE_URL}/ollama`;
 export const OPENAI_API_BASE_URL = `${WEBUI_BASE_URL}/openai`;

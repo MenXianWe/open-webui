@@ -123,7 +123,7 @@
 	};
 
 	const shareHandler = async () => {
-		toast.success($i18n.t('Redirecting you to Open WebUI Community'));
+		toast.success($i18n.t('Redirecting you to QLCodeChat Community'));
 
 		// remove snapshot from feedbacks
 		const feedbacksToShare = feedbacks.map((f) => {
@@ -132,7 +132,7 @@
 		});
 		console.log(feedbacksToShare);
 
-		const url = 'https://openwebui.com';
+		const url = 'https://qlcodeapi.com';
 		const tab = await window.open(`${url}/leaderboard`, '_blank');
 
 		// Define the event handler function

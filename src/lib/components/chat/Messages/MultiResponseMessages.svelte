@@ -18,7 +18,7 @@
 	import Skeleton from './Skeleton.svelte';
 	import localizedFormat from 'dayjs/plugin/localizedFormat';
 	import ProfileImage from './ProfileImage.svelte';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { CHAT_ASSISTANT_DISPLAY_NAME } from '$lib/constants';
 	import equal from 'fast-deep-equal';
 	const i18n = getContext('i18n');
 	dayjs.extend(localizedFormat);
@@ -26,7 +26,6 @@
 	export let chatId;
 	export let history;
 	export let messageId;
-	export let selectedModels = [];
 
 	export let isLastMessage;
 	export let readOnly = false;
@@ -36,7 +35,6 @@
 	export let updateChat: Function;
 	export let editMessage: Function;
 	export let saveMessage: Function;
-	export let rateMessage: Function;
 	export let actionMessage: Function;
 
 	export let submitMessage: Function;
@@ -45,8 +43,6 @@
 	export let continueResponse: Function;
 	export let regenerateResponse: Function;
 	export let mergeResponses: Function;
-
-	export let addMessages: Function;
 
 	export let triggerScroll: Function;
 
@@ -266,8 +262,6 @@
 									{@const _messageId =
 										groupedMessageIds[modelIdx].messageIds[groupedMessageIdsIdx[modelIdx]]}
 
-									{@const model = $models.find((m) => m.id === history.messages[_messageId]?.model)}
-
 									<button
 										class="min-w-fit {selectedModelIdx == modelIdx
 											? ' dark:border-gray-300 '
@@ -281,9 +275,7 @@
 										}}
 									>
 										<div class="flex items-center gap-1.5">
-											<div class="-translate-y-[1px]">
-												{model ? `${model.name}` : history.messages[_messageId]?.model}
-											</div>
+											<div class="-translate-y-[1px]">{CHAT_ASSISTANT_DISPLAY_NAME}</div>
 										</div>
 									</button>
 								{/if}
@@ -298,7 +290,6 @@
 									{chatId}
 									{history}
 									messageId={message?.id}
-									{selectedModels}
 									isLastMessage={true}
 									siblings={groupedMessageIds[selectedModelIdx].messageIds}
 									gotoMessage={(message, messageIdx) => gotoMessage(selectedModelIdx, messageIdx)}
@@ -308,7 +299,6 @@
 									{updateChat}
 									{editMessage}
 									{saveMessage}
-									{rateMessage}
 									{deleteMessage}
 									{actionMessage}
 									{submitMessage}
@@ -319,7 +309,6 @@
 										groupedMessageIdsIdx[selectedModelIdx] =
 											groupedMessageIds[selectedModelIdx].messageIds.length - 1;
 									}}
-									{addMessages}
 									{readOnly}
 									{topPadding}
 								/>
@@ -330,10 +319,10 @@
 			{:else}
 				{#each Object.keys(groupedMessageIds) as modelIdx}
 					{#if groupedMessageIdsIdx[modelIdx] !== undefined && groupedMessageIds[modelIdx].messageIds.length > 0}
-						<!-- svelte-ignore a11y-no-static-element-interactions -->
-						<!-- svelte-ignore a11y-click-events-have-key-events -->
 						{@const _messageId =
 							groupedMessageIds[modelIdx].messageIds[groupedMessageIdsIdx[modelIdx]]}
+						<!-- svelte-ignore a11y-no-static-element-interactions -->
+						<!-- svelte-ignore a11y-click-events-have-key-events -->
 
 						<div
 							class=" snap-center w-full max-w-full m-1 border {history.messages[messageId]
@@ -354,7 +343,6 @@
 										{chatId}
 										{history}
 										messageId={_messageId}
-										{selectedModels}
 										isLastMessage={true}
 										siblings={groupedMessageIds[modelIdx].messageIds}
 										gotoMessage={(message, messageIdx) => gotoMessage(modelIdx, messageIdx)}
@@ -364,7 +352,6 @@
 										{updateChat}
 										{editMessage}
 										{saveMessage}
-										{rateMessage}
 										{deleteMessage}
 										{actionMessage}
 										{submitMessage}
@@ -375,7 +362,6 @@
 											groupedMessageIdsIdx[modelIdx] =
 												groupedMessageIds[modelIdx].messageIds.length - 1;
 										}}
-										{addMessages}
 										{readOnly}
 										{editCodeBlock}
 										{topPadding}

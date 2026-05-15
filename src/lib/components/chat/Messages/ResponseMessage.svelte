@@ -36,7 +36,7 @@
 		removeDetails,
 		removeAllDetails
 	} from '$lib/utils';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { CHAT_ASSISTANT_DISPLAY_NAME, WEBUI_BRAND_LOGO_URL } from '$lib/constants';
 	import equal from 'fast-deep-equal';
 
 	import Name from './Name.svelte';
@@ -119,7 +119,6 @@
 	export let chatId = '';
 	export let history;
 	export let messageId;
-	export let selectedModels = [];
 
 	let message: MessageType = structuredClone(history.messages[messageId]);
 	$: if (history.messages) {
@@ -146,15 +145,12 @@
 	export let updateChat: Function;
 	export let editMessage: Function;
 	export let saveMessage: Function;
-	export let rateMessage: Function;
 	export let actionMessage: Function;
 	export let deleteMessage: Function;
 
 	export let submitMessage: Function;
 	export let continueResponse: Function;
 	export let regenerateResponse: Function;
-
-	export let addMessages: Function;
 
 	export let isLastMessage = true;
 	export let readOnly = false;
@@ -660,16 +656,16 @@
 	>
 		<div class={`shrink-0 ltr:mr-3 rtl:ml-3 hidden @lg:flex mt-1 `}>
 			<ProfileImage
-				src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model?.id}&lang=${$i18n.language}`}
+				src={WEBUI_BRAND_LOGO_URL}
 				className={'size-8 assistant-message-profile-image'}
 			/>
 		</div>
 
 		<div class="flex-auto w-0 pl-1 relative">
 			<Name>
-				<Tooltip content={model?.name ?? message.model} placement="top-start">
+				<Tooltip content={CHAT_ASSISTANT_DISPLAY_NAME} placement="top-start">
 					<span id="response-message-model-name" class="line-clamp-1 text-black dark:text-white">
-						{model?.name ?? message.model}
+						{CHAT_ASSISTANT_DISPLAY_NAME}
 					</span>
 				</Tooltip>
 
@@ -780,7 +776,7 @@
 												document.getElementById('confirm-edit-message-button')?.click();
 											}
 										}}
-									/>
+									></textarea>
 								{/if}
 
 								<div class=" mt-2 mb-1 flex justify-between text-sm font-medium">
@@ -1306,6 +1302,7 @@
 										{#if $settings?.regenerateMenu ?? true}
 											<button
 												type="button"
+												aria-label={$i18n.t('Regenerate response')}
 												class="hidden regenerate-response-button"
 												on:click={() => {
 													showRateComment = false;
@@ -1323,7 +1320,7 @@
 														});
 													});
 												}}
-											/>
+											></button>
 
 											<RegenerateMenu
 												onRegenerate={(prompt = null) => {

@@ -29,10 +29,8 @@
 	export let chatId = '';
 	export let user = $_user;
 
-	export let prompt;
 	export let history = {};
 	export let selectedModels;
-	export let atSelectedModel;
 
 	let messages = [];
 
@@ -46,7 +44,6 @@
 	export let chatActionHandler: Function;
 	export let showMessage: Function = () => {};
 	export let submitMessage: Function = () => {};
-	export let addMessages: Function = () => {};
 
 	export let readOnly = false;
 	export let editCodeBlock = true;
@@ -327,15 +324,6 @@
 		}
 	};
 
-	const rateMessage = async (messageId, rating) => {
-		history.messages[messageId].annotation = {
-			...history.messages[messageId].annotation,
-			rating: rating
-		};
-
-		await updateChat();
-	};
-
 	const editMessage = async (messageId, { content, files, output = undefined }, submit = true) => {
 		if ((selectedModels ?? []).filter((id) => id).length === 0) {
 			toast.error($i18n.t('Model not selected'));
@@ -479,7 +467,7 @@
 
 <div class={className}>
 	{#if Object.keys(history?.messages ?? {}).length == 0}
-		<ChatPlaceholder modelIds={selectedModels} {atSelectedModel} {onSelect} />
+		<ChatPlaceholder {onSelect} />
 	{:else}
 		<div class="w-full pt-2">
 			{#key chatId}
@@ -505,7 +493,6 @@
 							<Message
 								{chatId}
 								bind:history
-								{selectedModels}
 								messageId={message.id}
 								idx={messageIdx}
 								{user}
@@ -516,14 +503,12 @@
 								{updateChat}
 								{editMessage}
 								{deleteMessage}
-								{rateMessage}
 								{actionMessage}
 								{saveMessage}
 								{submitMessage}
 								{regenerateResponse}
 								{continueResponse}
 								{mergeResponses}
-								{addMessages}
 								{triggerScroll}
 								{readOnly}
 								{editCodeBlock}
@@ -532,9 +517,9 @@
 						{/each}
 					</ul>
 				</section>
-				<div class="pb-18" />
+				<div class="pb-18"></div>
 				{#if bottomPadding}
-					<div class="  pb-6" />
+					<div class="pb-6"></div>
 				{/if}
 			{/key}
 		</div>

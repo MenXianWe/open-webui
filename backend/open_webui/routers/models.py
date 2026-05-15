@@ -490,6 +490,9 @@ async def get_model_profile_image(
                 profile_image_url = arena_model.get('meta', {}).get('profile_image_url')
                 break
 
+    if profile_image_url in {'/favicon.png', '/static/favicon.png', '/static/logo.png'}:
+        profile_image_url = '/static/qlcode-login/app-logo.webp'
+
     if profile_image_url:
         if profile_image_url.startswith('http'):
             if ENABLE_PROFILE_IMAGE_URL_FORWARDING:
@@ -527,7 +530,7 @@ async def get_model_profile_image(
                 )
 
     return RedirectResponse(
-        url='/static/favicon.png',
+        url='/static/qlcode-login/app-logo.webp',
         status_code=status.HTTP_302_FOUND,
     )
 

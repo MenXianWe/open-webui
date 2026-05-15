@@ -928,7 +928,7 @@
 					<div class=" absolute top-4 md:top-8 left-4">
 						<button
 							type="button"
-							class="p-1.5 text-white cursor-pointer backdrop-blur-xl bg-black/10 rounded-full"
+							class="p-1.5 text-white cursor-pointer bg-black/10 rounded-full"
 							on:click={() => {
 								stopCamera();
 							}}

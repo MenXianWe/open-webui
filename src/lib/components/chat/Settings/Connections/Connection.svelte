@@ -1,94 +1,64 @@
 <script lang="ts">
-	import { getContext, tick } from 'svelte';
-	const i18n = getContext('i18n');
+	import { getContext } from 'svelte';
+	const i18n = getContext<any>('i18n');
 
 	import { settings } from '$lib/stores';
+	import { QLCODE_API_PORTAL_URL } from '$lib/constants';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
-	import Switch from '$lib/components/common/Switch.svelte';
 	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
-	import Cog6 from '$lib/components/icons/Cog6.svelte';
-	import AddConnectionModal from '$lib/components/AddConnectionModal.svelte';
 
-	export let onDelete = () => {};
-	export let onSubmit = () => {};
-
-	export let pipeline = false;
+	export let onSubmit = (_connection: { url: string; key: string }) => {};
 
 	export let url = '';
 	export let key = '';
-	export let config = {};
-
-	let showConfigModal = false;
 </script>
 
-<AddConnectionModal
-	edit
-	direct
-	bind:show={showConfigModal}
-	connection={{
-		url,
-		key,
-		config
-	}}
-	onDelete={() => {
-		onDelete();
-		showConfigModal = false;
-	}}
-	onSubmit={(connection) => {
-		url = connection.url;
-		key = connection.key;
-		config = connection.config;
-		onSubmit(connection);
-	}}
-/>
-
-<div class="flex w-full gap-2 items-center">
+<div class="flex w-full flex-col gap-2">
 	<Tooltip
 		className="w-full relative"
-		content={$i18n.t(`WebUI will make requests to "{{url}}/chat/completions"`, {
+		content={$i18n.t(`QLCodeChat will use "{{url}}" for OpenAI-compatible requests.`, {
 			url
 		})}
 		placement="top-start"
 	>
-		{#if !(config?.enable ?? true)}
-			<div
-				class="absolute top-0 bottom-0 left-0 right-0 opacity-60 bg-white dark:bg-gray-900 z-10"
-			></div>
-		{/if}
 		<div class="flex w-full gap-2">
 			<div class="flex-1 relative">
 				<input
-					class={`w-full bg-transparent ${($settings?.highContrastMode ?? false) ? '' : 'outline-hidden'} ${pipeline ? 'pr-8' : ''}`}
+					class={`w-full bg-transparent ${($settings?.highContrastMode ?? false) ? '' : 'outline-hidden'} text-gray-500 dark:text-gray-400`}
 					placeholder={$i18n.t('API Base URL')}
-					bind:value={url}
+					value={url}
 					autocomplete="off"
+					readonly
 				/>
 			</div>
 		</div>
 	</Tooltip>
 
-	<div class="flex gap-1 items-center">
-		<Tooltip content={$i18n.t('Configure')} className="self-start">
-			<button
-				aria-label={$i18n.t('Open modal to configure connection')}
-				class="self-center p-1 bg-transparent hover:bg-gray-100 dark:hover:bg-gray-850 rounded-lg transition"
-				on:click={() => {
-					showConfigModal = true;
-				}}
-				type="button"
-			>
-				<Cog6 />
-			</button>
-		</Tooltip>
+	<div class="flex items-center justify-between gap-3 pt-1">
+		<label for="qlcode-api-key" class="text-sm font-semibold text-gray-900 dark:text-gray-50">
+			{$i18n.t('API Key')}
+		</label>
+		<a
+			class="shrink-0 text-sm font-semibold text-blue-700 underline-offset-4 hover:text-blue-900 hover:underline dark:text-blue-300 dark:hover:text-blue-100"
+			href={QLCODE_API_PORTAL_URL}
+			target="_blank"
+			rel="noreferrer"
+			aria-label="获取 QLCodeAPI 密钥"
+		>
+			获取密钥
+		</a>
+	</div>
 
-		<Tooltip content={(config?.enable ?? true) ? $i18n.t('Enabled') : $i18n.t('Disabled')}>
-			<Switch
-				bind:state={config.enable}
-				on:change={() => {
-					config.enable = config.enable ?? false;
-					onSubmit({ url, key, config });
-				}}
-			/>
-		</Tooltip>
+	<div class="flex items-center">
+		<SensitiveInput
+			id="qlcode-api-key"
+			bind:value={key}
+			screenReader={false}
+			placeholder={$i18n.t('API Key')}
+			required={false}
+			on:change={() => {
+				onSubmit({ url, key });
+			}}
+		/>
 	</div>
 </div>

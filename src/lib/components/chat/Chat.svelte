@@ -375,8 +375,7 @@
 			if (model?.info?.meta?.defaultFeatureIds) {
 				if (
 					model.info?.meta?.capabilities?.['image_generation'] &&
-					$config?.features?.enable_image_generation &&
-					($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
+					$config?.features?.enable_image_generation
 				) {
 					imageGenerationEnabled = model.info.meta.defaultFeatureIds.includes('image_generation');
 				}
@@ -1666,69 +1665,6 @@
 		}
 	};
 
-	const addMessages = async ({ modelId, parentId, messages }) => {
-		const model = $models.filter((m) => m.id === modelId).at(0);
-
-		let parentMessage = history.messages[parentId];
-		let currentParentId = parentMessage ? parentMessage.id : null;
-		for (const message of messages) {
-			let messageId = uuidv4();
-
-			if (message.role === 'user') {
-				const userMessage = {
-					id: messageId,
-					parentId: currentParentId,
-					childrenIds: [],
-					timestamp: Math.floor(Date.now() / 1000),
-					...message
-				};
-
-				if (parentMessage) {
-					parentMessage.childrenIds.push(messageId);
-					history.messages[parentMessage.id] = parentMessage;
-				}
-
-				history.messages[messageId] = userMessage;
-				parentMessage = userMessage;
-				currentParentId = messageId;
-			} else {
-				const responseMessage = {
-					id: messageId,
-					parentId: currentParentId,
-					childrenIds: [],
-					done: true,
-					model: model.id,
-					modelName: model.name ?? model.id,
-					modelIdx: 0,
-					timestamp: Math.floor(Date.now() / 1000),
-					...message
-				};
-
-				if (parentMessage) {
-					parentMessage.childrenIds.push(messageId);
-					history.messages[parentMessage.id] = parentMessage;
-				}
-
-				history.messages[messageId] = responseMessage;
-				parentMessage = responseMessage;
-				currentParentId = messageId;
-			}
-		}
-
-		history.currentId = currentParentId;
-		await tick();
-
-		if (autoScroll) {
-			scrollToBottom();
-		}
-
-		if (messages.length === 0) {
-			await initChatHandler(history);
-		} else {
-			await saveChatHandler($chatId, history);
-		}
-	};
-
 	const chatCompletionEventHandler = async (data, message, chatId) => {
 		const { id, done, choices, content, output, sources, selected_model_id, error, usage } = data;
 
@@ -2183,11 +2119,9 @@
 		if ($config?.features)
 			features = {
 				voice: $showCallOverlay,
-				image_generation:
-					$config?.features?.enable_image_generation &&
-					($user?.role === 'admin' || $user?.permissions?.features?.image_generation)
-						? imageGenerationEnabled
-						: false,
+				image_generation: $config?.features?.enable_image_generation
+					? imageGenerationEnabled
+					: false,
 				code_interpreter:
 					$config?.features?.enable_code_interpreter &&
 					($user?.role === 'admin' || $user?.permissions?.features?.code_interpreter)
@@ -2971,21 +2905,20 @@
 				<div
 					class="absolute top-0 left-0 w-full h-full bg-cover bg-center bg-no-repeat"
 					style="background-image: url({$selectedFolder?.meta?.background_image_url})  "
-				/>
+				></div>
 
 				<div
 					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
-				/>
-			{:else if $settings?.backgroundImageUrl ?? $config?.license_metadata?.background_image_url ?? null}
+				></div>
+			{:else if $settings?.backgroundImageUrl ?? null}
 				<div
 					class="absolute top-0 left-0 w-full h-full bg-cover bg-center bg-no-repeat"
-					style="background-image: url({$settings?.backgroundImageUrl ??
-						$config?.license_metadata?.background_image_url})  "
-				/>
+					style="background-image: url({$settings?.backgroundImageUrl})  "
+				></div>
 
 				<div
 					class="absolute top-0 left-0 w-full h-full bg-linear-to-t from-white to-white/85 dark:from-gray-900 dark:to-gray-900/90 z-0"
-				/>
+				></div>
 			{/if}
 
 			<PaneGroup direction="horizontal" class="w-full h-full">
@@ -3071,12 +3004,10 @@
 										chatId={$chatId}
 										bind:history
 										bind:autoScroll
-										bind:prompt
 										setInputText={(text) => {
 											messageInput?.setText(text);
 										}}
 										{selectedModels}
-										{atSelectedModel}
 										{sendMessage}
 										{showMessage}
 										{submitMessage}
@@ -3084,7 +3015,6 @@
 										{regenerateResponse}
 										{mergeResponses}
 										{chatActionHandler}
-										{addMessages}
 										topPadding={true}
 										bottomPadding={files.length > 0}
 										{onSelect}

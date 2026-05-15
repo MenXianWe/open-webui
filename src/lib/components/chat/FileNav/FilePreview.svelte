@@ -536,7 +536,6 @@
 		position: sticky;
 		top: 0;
 		background: rgba(243, 244, 246, 0.95);
-		backdrop-filter: blur(4px);
 		font-weight: 600;
 		color: #374151;
 		border-bottom: 2px solid rgba(128, 128, 128, 0.25);

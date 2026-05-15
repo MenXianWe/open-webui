@@ -417,7 +417,7 @@
 											class={`w-full flex-1 text-sm bg-transparent font-mono ${($settings?.highContrastMode ?? false) ? 'placeholder:text-gray-700 dark:placeholder:text-gray-100' : 'outline-hidden placeholder:text-gray-300 dark:placeholder:text-gray-700'}`}
 											type="text"
 											bind:value={policyImage}
-											placeholder="ghcr.io/open-webui/open-terminal:latest"
+											placeholder="ghcr.io/qlcode-chat/open-terminal:latest"
 											autocomplete="off"
 										/>
 									</div>
@@ -641,7 +641,7 @@
 									<div
 										class={`text-xs mt-1 ${($settings?.highContrastMode ?? false) ? 'text-gray-800 dark:text-gray-100' : 'text-gray-500'}`}
 									>
-										{$i18n.t(`WebUI will make requests to "{{url}}"`, {
+										{$i18n.t(`QLCodeChat will make requests to "{{url}}"`, {
 											url: path.includes('://')
 												? path
 												: `${url}${path.startsWith('/') ? '' : '/'}${path}`

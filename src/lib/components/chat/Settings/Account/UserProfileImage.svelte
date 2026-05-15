@@ -7,7 +7,7 @@
 	import { getGravatarUrl } from '$lib/apis/utils';
 	import { canvasPixelTest, generateInitialsImage } from '$lib/utils';
 
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_BASE_URL, WEBUI_DEFAULT_USER_PROFILE_IMAGE_VALUE } from '$lib/constants';
 
 	export let profileImageUrl;
 	export let user = null;
@@ -15,6 +15,28 @@
 	export let imageClassName = 'size-14 md:size-18';
 
 	let profileImageInputElement;
+
+	const getDisplayProfileImageUrl = (imageUrl: string) => {
+		if (!imageUrl || imageUrl === WEBUI_DEFAULT_USER_PROFILE_IMAGE_VALUE) {
+			return generateInitialsImage(user?.name ?? '');
+		}
+
+		if (imageUrl.startsWith('/api/') || imageUrl.startsWith('/static/')) {
+			return `${WEBUI_BASE_URL}${imageUrl}`;
+		}
+
+		return imageUrl;
+	};
+
+	const useDefaultUserImage = (event: Event) => {
+		const image = event.currentTarget as HTMLImageElement;
+		const initialsImageUrl = generateInitialsImage(user?.name ?? '');
+		if (image.src === initialsImageUrl) {
+			return;
+		}
+
+		image.src = initialsImageUrl;
+	};
 </script>
 
 <input
@@ -89,9 +111,10 @@
 			}}
 		>
 			<img
-				src={profileImageUrl !== '' ? profileImageUrl : generateInitialsImage(user?.name)}
+				src={getDisplayProfileImageUrl(profileImageUrl)}
 				alt="profile"
 				class=" rounded-full {imageClassName} object-cover"
+				on:error={useDefaultUserImage}
 			/>
 
 			<div class="absolute bottom-0 right-0 opacity-0 group-hover:opacity-100 transition">
@@ -115,7 +138,7 @@
 			class=" text-xs text-center text-gray-500 rounded-lg py-0.5 opacity-0 group-hover:opacity-100 transition-all"
 			type="button"
 			on:click={async () => {
-				profileImageUrl = `${WEBUI_BASE_URL}/user.png`;
+				profileImageUrl = generateInitialsImage(user?.name ?? '');
 			}}>{$i18n.t('Remove')}</button
 		>
 
@@ -134,6 +157,7 @@
 							duration: 1000 * 10
 						}
 					);
+					profileImageUrl = WEBUI_DEFAULT_USER_PROFILE_IMAGE_VALUE;
 				}
 			}}>{$i18n.t('Initials')}</button
 		>

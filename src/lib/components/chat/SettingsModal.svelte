@@ -79,8 +79,8 @@
 				'system settings',
 				'theme',
 				'translate',
-				'webuisettings',
-				'webui settings'
+				'qlcodechatsettings',
+				'qlcodechat settings'
 			]
 		},
 		{
@@ -433,26 +433,19 @@
 			keywords: [
 				'about app',
 				'about me',
-				'about open webui',
+				'about qlcodechat',
 				'about page',
 				'about us',
 				'aboutapp',
 				'aboutme',
-				'aboutopenwebui',
+				'aboutqlcodechat',
 				'aboutpage',
 				'aboutus',
 				'check for updates',
 				'checkforupdates',
 				'contact',
-				'copyright',
 				'details',
-				'discord',
-				'documentation',
-				'github',
-				'help',
 				'information',
-				'license',
-				'redistributions',
 				'release',
 				'see whats new',
 				'seewhatsnew',
@@ -460,14 +453,6 @@
 				'software info',
 				'softwareinfo',
 				'support',
-				'terms and conditions',
-				'terms of use',
-				'termsandconditions',
-				'termsofuse',
-				'timothy jae ryang baek',
-				'timothy j baek',
-				'timothyjaeryangbaek',
-				'timothyjbaek',
 				'twitter',
 				'update info',
 				'updateinfo',
@@ -589,8 +574,8 @@
 	});
 </script>
 
-<Modal size="2xl" bind:show>
-	<div class="text-gray-700 dark:text-gray-100 mx-1">
+<Modal size="2xl" bind:show className="bg-white dark:bg-gray-950 rounded-3xl">
+	<div id="settings-modal-content" class="text-gray-700 dark:text-gray-100 mx-1">
 		<div class=" flex justify-between dark:text-gray-300 px-4 md:px-4.5 pt-4.5 pb-0.5 md:pb-2.5">
 			<div class=" text-lg font-medium self-center">{$i18n.t('Settings')}</div>
 			<button
@@ -611,7 +596,7 @@
 				class="tabs flex flex-row overflow-x-auto gap-2.5 mx-3 md:pr-4 md:gap-1 md:flex-col flex-1 md:flex-none md:w-50 md:min-h-[min(42rem,calc(100dvh-10rem))] md:max-h-[min(42rem,calc(100dvh-10rem))] dark:text-gray-200 text-sm text-left mb-1 md:mb-0 -translate-y-1"
 			>
 				<div
-					class="hidden md:flex w-full rounded-full px-2.5 gap-2 bg-gray-100/80 dark:bg-gray-850/80 backdrop-blur-2xl my-1 mb-1.5"
+					class="hidden md:flex w-full rounded-full px-2.5 gap-2 bg-gray-100/80 dark:bg-gray-850/80 my-1 mb-1.5"
 					id="settings-search"
 				>
 					<div class="self-center rounded-l-xl bg-transparent">
@@ -959,8 +944,130 @@
 		scrollbar-width: none; /* Firefox */
 	}
 
-	input[type='number'] {
+	:global(#settings-modal-content input[type='number']) {
 		appearance: textfield;
 		-moz-appearance: textfield; /* Firefox */
+	}
+
+	#settings-modal-content {
+		color: rgb(17 24 39);
+		font-size: 15px;
+		letter-spacing: 0;
+	}
+
+	#settings-modal-content :global([class*='text-gray-']) {
+		color: rgb(31 41 55) !important;
+	}
+
+	:global(#settings-modal-content input::placeholder),
+	:global(#settings-modal-content textarea::placeholder) {
+		color: rgb(75 85 99);
+		opacity: 1;
+	}
+
+	#settings-modal-content :global(.text-xs) {
+		font-size: 13px;
+		line-height: 18px;
+	}
+
+	#settings-modal-content :global(.text-sm) {
+		font-size: 15px;
+		line-height: 22px;
+	}
+
+	#settings-modal-content :global(.text-base) {
+		font-size: 16px;
+		line-height: 24px;
+	}
+
+	#settings-modal-content :global(.text-lg) {
+		font-size: 18px;
+		line-height: 28px;
+	}
+
+	#settings-tabs-container {
+		gap: 4px;
+		padding: 4px 12px 4px 0;
+	}
+
+	#settings-tabs-container :global([role='tab']),
+	#settings-tabs-container :global(a) {
+		min-height: 36px;
+		border: 1px solid transparent;
+		border-radius: 12px;
+		padding: 7px 10px;
+		color: rgb(31 41 55) !important;
+		font-size: 15px;
+		font-weight: 500;
+		line-height: 20px;
+	}
+
+	#settings-tabs-container :global([role='tab']:hover),
+	#settings-tabs-container :global(a:hover) {
+		background: rgb(243 244 246);
+		color: rgb(17 24 39) !important;
+	}
+
+	#settings-tabs-container :global([role='tab'][aria-selected='true']) {
+		background: rgb(255 255 255);
+		border-color: rgb(229 231 235);
+		box-shadow: 0 1px 2px rgb(17 24 39 / 8%);
+		color: rgb(17 24 39) !important;
+	}
+
+	#settings-tabs-container :global([role='tab'] svg),
+	#settings-tabs-container :global(a svg) {
+		width: 18px;
+		height: 18px;
+		stroke-width: 2;
+	}
+
+	#settings-search {
+		border: 1px solid rgb(229 231 235);
+		background: rgb(249 250 251);
+		border-radius: 12px;
+		min-height: 36px;
+	}
+
+	#settings-search input {
+		font-size: 15px;
+		line-height: 20px;
+	}
+
+	:global(.dark) #settings-modal-content {
+		color: rgb(249 250 251);
+	}
+
+	:global(.dark) #settings-modal-content :global([class*='text-gray-']) {
+		color: rgb(229 231 235) !important;
+	}
+
+	:global(.dark) :global(#settings-modal-content input::placeholder),
+	:global(.dark) :global(#settings-modal-content textarea::placeholder) {
+		color: rgb(209 213 219);
+		opacity: 1;
+	}
+
+	:global(.dark) #settings-tabs-container :global([role='tab']),
+	:global(.dark) #settings-tabs-container :global(a) {
+		color: rgb(243 244 246) !important;
+	}
+
+	:global(.dark) #settings-tabs-container :global([role='tab']:hover),
+	:global(.dark) #settings-tabs-container :global(a:hover) {
+		background: rgb(31 41 55);
+		color: rgb(255 255 255) !important;
+	}
+
+	:global(.dark) #settings-tabs-container :global([role='tab'][aria-selected='true']) {
+		background: rgb(17 24 39);
+		border-color: rgb(55 65 81);
+		box-shadow: none;
+		color: rgb(255 255 255) !important;
+	}
+
+	:global(.dark) #settings-search {
+		border-color: rgb(55 65 81);
+		background: rgb(17 24 39);
 	}
 </style>

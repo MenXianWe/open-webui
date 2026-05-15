@@ -14,7 +14,6 @@ from uuid import uuid4
 
 import markdown
 from bs4 import BeautifulSoup
-from cryptography.hazmat.primitives import serialization
 
 from open_webui.constants import ERROR_MESSAGES
 
@@ -31,7 +30,7 @@ OPEN_WEBUI_DIR = ENV_FILE_PATH.parent
 # BACKEND_DIR is the parent of OPEN_WEBUI_DIR (backend/)
 BACKEND_DIR = OPEN_WEBUI_DIR.parent
 
-# BASE_DIR is the parent of BACKEND_DIR (open-webui-dev/)
+# BASE_DIR is the parent of BACKEND_DIR (qlcode-chat-dev/)
 BASE_DIR = BACKEND_DIR.parent
 
 try:
@@ -127,11 +126,9 @@ if 'cuda_error' in locals():
 
 SRC_LOG_LEVELS = {}  # Legacy variable, do not remove
 
-WEBUI_NAME = os.environ.get('WEBUI_NAME', 'Open WebUI')
-if WEBUI_NAME != 'Open WebUI':
-    WEBUI_NAME += ' (Open WebUI)'
+WEBUI_NAME = os.environ.get('WEBUI_NAME', 'QLCodeChat')
 
-WEBUI_FAVICON_URL = 'https://openwebui.com/favicon.png'
+WEBUI_FAVICON_URL = 'https://qlcodeapi.com/favicon.png'
 
 TRUSTED_SIGNATURE_KEY = os.environ.get('TRUSTED_SIGNATURE_KEY', '')
 
@@ -144,7 +141,7 @@ ENV = os.environ.get('ENV', 'dev')
 FROM_INIT_PY = os.environ.get('FROM_INIT_PY', 'False').lower() == 'true'
 
 if FROM_INIT_PY:
-    PACKAGE_DATA = {'version': importlib.metadata.version('open-webui')}
+    PACKAGE_DATA = {'version': importlib.metadata.version('qlcode-chat')}
 else:
     try:
         PACKAGE_DATA = json.loads((BASE_DIR / 'package.json').read_text())
@@ -233,16 +230,16 @@ SAFE_MODE = os.environ.get('SAFE_MODE', 'false').lower() == 'true'
 ENABLE_FORWARD_USER_INFO_HEADERS = os.environ.get('ENABLE_FORWARD_USER_INFO_HEADERS', 'False').lower() == 'true'
 
 # Header names for user info forwarding (customizable via environment variables)
-FORWARD_USER_INFO_HEADER_USER_NAME = os.environ.get('FORWARD_USER_INFO_HEADER_USER_NAME', 'X-OpenWebUI-User-Name')
-FORWARD_USER_INFO_HEADER_USER_ID = os.environ.get('FORWARD_USER_INFO_HEADER_USER_ID', 'X-OpenWebUI-User-Id')
-FORWARD_USER_INFO_HEADER_USER_EMAIL = os.environ.get('FORWARD_USER_INFO_HEADER_USER_EMAIL', 'X-OpenWebUI-User-Email')
-FORWARD_USER_INFO_HEADER_USER_ROLE = os.environ.get('FORWARD_USER_INFO_HEADER_USER_ROLE', 'X-OpenWebUI-User-Role')
+FORWARD_USER_INFO_HEADER_USER_NAME = os.environ.get('FORWARD_USER_INFO_HEADER_USER_NAME', 'X-QLCodeChat-User-Name')
+FORWARD_USER_INFO_HEADER_USER_ID = os.environ.get('FORWARD_USER_INFO_HEADER_USER_ID', 'X-QLCodeChat-User-Id')
+FORWARD_USER_INFO_HEADER_USER_EMAIL = os.environ.get('FORWARD_USER_INFO_HEADER_USER_EMAIL', 'X-QLCodeChat-User-Email')
+FORWARD_USER_INFO_HEADER_USER_ROLE = os.environ.get('FORWARD_USER_INFO_HEADER_USER_ROLE', 'X-QLCodeChat-User-Role')
 
 # Header name for chat ID forwarding (customizable via environment variable)
 FORWARD_SESSION_INFO_HEADER_MESSAGE_ID = os.environ.get(
-    'FORWARD_SESSION_INFO_HEADER_MESSAGE_ID', 'X-OpenWebUI-Message-Id'
+    'FORWARD_SESSION_INFO_HEADER_MESSAGE_ID', 'X-QLCodeChat-Message-Id'
 )
-FORWARD_SESSION_INFO_HEADER_CHAT_ID = os.environ.get('FORWARD_SESSION_INFO_HEADER_CHAT_ID', 'X-OpenWebUI-Chat-Id')
+FORWARD_SESSION_INFO_HEADER_CHAT_ID = os.environ.get('FORWARD_SESSION_INFO_HEADER_CHAT_ID', 'X-QLCodeChat-Chat-Id')
 
 # Experimental feature, may be removed in future
 ENABLE_STAR_SESSIONS_MIDDLEWARE = os.environ.get('ENABLE_STAR_SESSIONS_MIDDLEWARE', 'False').lower() == 'true'
@@ -316,15 +313,17 @@ if FROM_INIT_PY:
 # Database
 ####################################
 
-# Check if the file exists
-if os.path.exists(f'{DATA_DIR}/ollama.db'):
-    # Rename the file
-    os.rename(f'{DATA_DIR}/ollama.db', f'{DATA_DIR}/webui.db')
-    log.info('Database migrated from Ollama-WebUI successfully.')
-else:
-    pass
+LEGACY_DATABASE_PATHS = [f'{DATA_DIR}/webui.db', f'{DATA_DIR}/ollama.db']
+DEFAULT_DATABASE_PATH = f'{DATA_DIR}/qlcode-chat.db'
 
-DATABASE_URL = os.environ.get('DATABASE_URL', f'sqlite:///{DATA_DIR}/webui.db')
+if not os.path.exists(DEFAULT_DATABASE_PATH):
+    for legacy_database_path in LEGACY_DATABASE_PATHS:
+        if os.path.exists(legacy_database_path):
+            os.rename(legacy_database_path, DEFAULT_DATABASE_PATH)
+            log.info(f'Database migrated from {Path(legacy_database_path).name} to qlcode-chat.db successfully.')
+            break
+
+DATABASE_URL = os.environ.get('DATABASE_URL', f'sqlite:///{DEFAULT_DATABASE_PATH}')
 
 DATABASE_TYPE = os.environ.get('DATABASE_TYPE')
 DATABASE_USER = os.environ.get('DATABASE_USER')
@@ -350,7 +349,7 @@ if all(DB_VARS.values()):
     )
 elif DATABASE_TYPE == 'sqlite+sqlcipher' and not os.environ.get('DATABASE_URL'):
     # Handle SQLCipher with local file when DATABASE_URL wasn't explicitly set
-    DATABASE_URL = f'sqlite+sqlcipher:///{DATA_DIR}/webui.db'
+    DATABASE_URL = f'sqlite+sqlcipher:///{DEFAULT_DATABASE_PATH}'
 
 # Replace the postgres:// with postgresql://
 if 'postgres://' in DATABASE_URL:
@@ -454,7 +453,7 @@ RAG_SYSTEM_CONTEXT = os.environ.get('RAG_SYSTEM_CONTEXT', 'False').lower() == 't
 REDIS_URL = os.environ.get('REDIS_URL', '')
 REDIS_CLUSTER = os.environ.get('REDIS_CLUSTER', 'False').lower() == 'true'
 
-REDIS_KEY_PREFIX = os.environ.get('REDIS_KEY_PREFIX', 'open-webui')
+REDIS_KEY_PREFIX = os.environ.get('REDIS_KEY_PREFIX', 'qlcode-chat')
 
 REDIS_SENTINEL_HOSTS = os.environ.get('REDIS_SENTINEL_HOSTS', '')
 REDIS_SENTINEL_PORT = os.environ.get('REDIS_SENTINEL_PORT', '26379')
@@ -547,9 +546,9 @@ WEBUI_AUTH_TRUSTED_GROUPS_HEADER = os.environ.get('WEBUI_AUTH_TRUSTED_GROUPS_HEA
 WEBUI_AUTH_TRUSTED_ROLE_HEADER = os.environ.get('WEBUI_AUTH_TRUSTED_ROLE_HEADER', None)
 
 # Custom header name for API key authentication.  Defaults to 'x-api-key'.
-# Useful when Open WebUI sits behind a reverse proxy / API gateway that
+# Useful when QLCodeChat sits behind a reverse proxy / API gateway that
 # already uses the Authorization header for its own authentication — set
-# this to a unique header (e.g. 'X-OpenWebUI-Key') so the middleware
+# this to a unique header (e.g. 'X-QLCodeChat-Key') so the middleware
 # checks the custom header instead and avoids the 401 short-circuit.
 CUSTOM_API_KEY_HEADER = os.environ.get('CUSTOM_API_KEY_HEADER', 'x-api-key')
 
@@ -579,7 +578,7 @@ BYPASS_PYDUB_PREPROCESSING = os.environ.get('BYPASS_PYDUB_PREPROCESSING', 'False
 
 # When disabled (default), the OpenAI catch-all proxy endpoint (/{path:path})
 # is blocked. Enable only if you need direct passthrough to upstream OpenAI-
-# compatible APIs for endpoints not natively handled by Open WebUI.
+# compatible APIs for endpoints not natively handled by QLCodeChat.
 ENABLE_OPENAI_API_PASSTHROUGH = os.environ.get('ENABLE_OPENAI_API_PASSTHROUGH', 'False').lower() == 'true'
 
 WEBUI_AUTH_SIGNOUT_REDIRECT_URL = os.environ.get('WEBUI_AUTH_SIGNOUT_REDIRECT_URL', None)
@@ -628,7 +627,7 @@ OAUTH_SESSION_TOKEN_ENCRYPTION_KEY = os.environ.get('OAUTH_SESSION_TOKEN_ENCRYPT
 OAUTH_MAX_SESSIONS_PER_USER = int(os.environ.get('OAUTH_MAX_SESSIONS_PER_USER', '10'))
 
 # Token Exchange Configuration
-# Allows external apps to exchange OAuth tokens for OpenWebUI tokens
+# Allows external apps to exchange OAuth tokens for QLCodeChat tokens
 ENABLE_OAUTH_TOKEN_EXCHANGE = os.environ.get('ENABLE_OAUTH_TOKEN_EXCHANGE', 'False').lower() == 'true'
 
 # Back-Channel Logout Configuration
@@ -651,31 +650,6 @@ if ENABLE_SCIM and not SCIM_AUTH_PROVIDER:
         "Set SCIM_AUTH_PROVIDER to the OAuth provider name (e.g. 'microsoft', 'oidc') "
         'to enable externalId storage.'
     )
-
-####################################
-# LICENSE_KEY
-####################################
-
-LICENSE_KEY = os.environ.get('LICENSE_KEY', '')
-
-LICENSE_BLOB = None
-LICENSE_BLOB_PATH = os.environ.get('LICENSE_BLOB_PATH', DATA_DIR / 'l.data')
-if LICENSE_BLOB_PATH and os.path.exists(LICENSE_BLOB_PATH):
-    with open(LICENSE_BLOB_PATH, 'rb') as f:
-        LICENSE_BLOB = f.read()
-
-LICENSE_PUBLIC_KEY = os.environ.get('LICENSE_PUBLIC_KEY', '')
-
-pk = None
-if LICENSE_PUBLIC_KEY:
-    pk = serialization.load_pem_public_key(
-        f"""
------BEGIN PUBLIC KEY-----
-{LICENSE_PUBLIC_KEY}
------END PUBLIC KEY-----
-""".encode()
-    )
-
 
 ####################################
 # MODELS
@@ -1036,7 +1010,7 @@ OTEL_METRICS_EXPORTER_OTLP_INSECURE = (
 OTEL_LOGS_EXPORTER_OTLP_INSECURE = (
     os.environ.get('OTEL_LOGS_EXPORTER_OTLP_INSECURE', str(OTEL_EXPORTER_OTLP_INSECURE)).lower() == 'true'
 )
-OTEL_SERVICE_NAME = os.environ.get('OTEL_SERVICE_NAME', 'open-webui')
+OTEL_SERVICE_NAME = os.environ.get('OTEL_SERVICE_NAME', 'qlcode-chat')
 OTEL_RESOURCE_ATTRIBUTES = os.environ.get('OTEL_RESOURCE_ATTRIBUTES', '')  # e.g. key1=val1,key2=val2
 OTEL_TRACES_SAMPLER = os.environ.get('OTEL_TRACES_SAMPLER', 'parentbased_always_on').lower()
 OTEL_BASIC_AUTH_USERNAME = os.environ.get('OTEL_BASIC_AUTH_USERNAME', '')

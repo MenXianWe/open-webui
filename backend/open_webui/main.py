@@ -381,7 +381,7 @@ from open_webui.config import (
     YANDEX_WEB_SEARCH_API_KEY,
     YANDEX_WEB_SEARCH_CONFIG,
     YOUCOM_API_KEY,
-    # WebUI
+    # Application
     WEBUI_AUTH,
     WEBUI_NAME,
     WEBUI_BANNERS,
@@ -422,7 +422,7 @@ from open_webui.config import (
     DEFAULT_MODEL_METADATA,
     DEFAULT_MODEL_PARAMS,
     EVALUATION_ARENA_MODELS,
-    # WebUI (OAuth)
+    # Application (OAuth)
     ENABLE_OAUTH_ROLE_MANAGEMENT,
     OAUTH_SUB_CLAIM,
     OAUTH_ROLES_CLAIM,
@@ -431,7 +431,7 @@ from open_webui.config import (
     OAUTH_USERNAME_CLAIM,
     OAUTH_ALLOWED_ROLES,
     OAUTH_ADMIN_ROLES,
-    # WebUI (LDAP)
+    # Application (LDAP)
     ENABLE_LDAP,
     LDAP_SERVER_LABEL,
     LDAP_SERVER_HOST,
@@ -491,7 +491,6 @@ from open_webui.config import (
 )
 from open_webui.env import (
     ENABLE_CUSTOM_MODEL_FALLBACK,
-    LICENSE_KEY,
     AUDIT_EXCLUDED_PATHS,
     AUDIT_INCLUDED_PATHS,
     ENABLE_AUDIT_GET_REQUESTS,
@@ -560,7 +559,6 @@ from open_webui.utils.middleware import (
 from open_webui.utils.tools import set_tool_servers, set_terminal_servers
 
 from open_webui.utils.auth import (
-    get_license_data,
     get_http_authorization_cred,
     decode_token,
     get_admin_user,
@@ -622,17 +620,10 @@ class SPAStaticFiles(StaticFiles):
 
 if LOG_FORMAT != 'json':
     print(rf"""
- ██████╗ ██████╗ ███████╗███╗   ██╗    ██╗    ██╗███████╗██████╗ ██╗   ██╗██╗
-██╔═══██╗██╔══██╗██╔════╝████╗  ██║    ██║    ██║██╔════╝██╔══██╗██║   ██║██║
-██║   ██║██████╔╝█████╗  ██╔██╗ ██║    ██║ █╗ ██║█████╗  ██████╔╝██║   ██║██║
-██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║    ██║███╗██║██╔══╝  ██╔══██╗██║   ██║██║
-╚██████╔╝██║     ███████╗██║ ╚████║    ╚███╔███╔╝███████╗██████╔╝╚██████╔╝██║
- ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝     ╚══╝╚══╝ ╚══════╝╚═════╝  ╚═════╝ ╚═╝
-
-
-v{VERSION} - building the best AI user interface.
+QLCodeChat
+v{VERSION}
 {f'Commit: {WEBUI_BUILD_HASH}' if WEBUI_BUILD_HASH != 'dev-build' else ''}
-https://github.com/open-webui/open-webui
+https://qlcodeapi.com/
 """)
 
 
@@ -647,9 +638,6 @@ async def lifespan(app: FastAPI):
 
     if RESET_CONFIG_ON_START:
         await async_reset_config()
-
-    if LICENSE_KEY:
-        get_license_data(app, LICENSE_KEY)
 
     # Create admin account from env vars if specified and no users exist
     if WEBUI_ADMIN_EMAIL and WEBUI_ADMIN_PASSWORD:
@@ -756,7 +744,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title='Open WebUI',
+    title='QLCodeChat',
     docs_url='/docs' if ENV == 'dev' else None,
     openapi_url='/openapi.json' if ENV == 'dev' else None,
     redoc_url=None,
@@ -766,7 +754,7 @@ app = FastAPI(
 # Used by readiness checks to gate traffic until startup work is done.
 app.state.startup_complete = False
 
-# For Open WebUI OIDC/OAuth2
+# For QLCodeChat OIDC/OAuth2
 oauth_manager = OAuthManager(app)
 app.state.oauth_manager = oauth_manager
 
@@ -784,7 +772,6 @@ app.state.config = AppConfig(
 app.state.redis = None
 
 app.state.WEBUI_NAME = WEBUI_NAME
-app.state.LICENSE_METADATA = None
 
 
 ########################################
@@ -871,7 +858,7 @@ app.state.BASE_MODELS = []
 
 ########################################
 #
-# WEBUI
+# Application
 #
 ########################################
 
@@ -1378,7 +1365,7 @@ app.state.config.ENABLE_VOICE_MODE_PROMPT = ENABLE_VOICE_MODE_PROMPT
 
 ########################################
 #
-# WEBUI
+# Application
 #
 ########################################
 
@@ -2194,7 +2181,7 @@ async def generate_messages(
     pipeline, then converts the response back to Anthropic Messages format.
 
     Supports both streaming and non-streaming requests.
-    All models configured in Open WebUI are accessible via this endpoint.
+    All models configured in QLCodeChat are accessible via this endpoint.
 
     Authentication: Supports both standard Authorization header and
     Anthropic's x-api-key header (via middleware translation).
@@ -2379,7 +2366,7 @@ async def get_app_config(request: Request):
                     'enable_web_search': app.state.config.ENABLE_WEB_SEARCH,
                     'enable_code_execution': app.state.config.ENABLE_CODE_EXECUTION,
                     'enable_code_interpreter': app.state.config.ENABLE_CODE_INTERPRETER,
-                    'enable_image_generation': app.state.config.ENABLE_IMAGE_GENERATION,
+                    'enable_image_generation': True,
                     'enable_autocomplete_generation': app.state.config.ENABLE_AUTOCOMPLETE_GENERATION,
                     'enable_community_sharing': app.state.config.ENABLE_COMMUNITY_SHARING,
                     'enable_message_rating': app.state.config.ENABLE_MESSAGE_RATING,
@@ -2449,7 +2436,6 @@ async def get_app_config(request: Request):
                     'response_watermark': app.state.config.RESPONSE_WATERMARK,
                     'iframe_csp': IFRAME_CSP,
                 },
-                'license_metadata': app.state.LICENSE_METADATA,
                 **(
                     {
                         'active_entries': app.state.USER_COUNT,
@@ -2468,16 +2454,6 @@ async def get_app_config(request: Request):
                         }
                     }
                     if user and user.role == 'pending'
-                    else {}
-                ),
-                **(
-                    {
-                        'metadata': {
-                            'login_footer': app.state.LICENSE_METADATA.get('login_footer', ''),
-                            'auth_logo_position': app.state.LICENSE_METADATA.get('auth_logo_position', ''),
-                        }
-                    }
-                    if app.state.LICENSE_METADATA
                     else {}
                 ),
             }
@@ -2513,24 +2489,9 @@ async def get_app_version():
 
 @app.get('/api/version/updates')
 async def get_app_latest_release_version(user=Depends(get_verified_user)):
-    if not ENABLE_VERSION_UPDATE_CHECK:
-        log.debug(f'Version update check is disabled, returning current version as latest version')
-        return {'current': VERSION, 'latest': VERSION}
-    try:
-        timeout = aiohttp.ClientTimeout(total=1)
-        async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
-            async with session.get(
-                'https://api.github.com/repos/open-webui/open-webui/releases/latest',
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as response:
-                response.raise_for_status()
-                data = await response.json()
-                latest_version = data['tag_name']
-
-                return {'current': VERSION, 'latest': latest_version[1:]}
-    except Exception as e:
-        log.debug(e)
-        return {'current': VERSION, 'latest': VERSION}
+    if ENABLE_VERSION_UPDATE_CHECK:
+        log.debug('Remote version update checks are disabled for this private build')
+    return {'current': VERSION, 'latest': VERSION}
 
 
 @app.get('/api/changelog')
@@ -2541,7 +2502,7 @@ async def get_app_changelog():
 @app.get('/api/usage')
 async def get_current_usage(user=Depends(get_verified_user)):
     """
-    Get current usage statistics for Open WebUI.
+    Get current usage statistics for QLCodeChat.
     This is an experimental endpoint and subject to change.
     """
     try:
@@ -2800,21 +2761,21 @@ async def get_manifest_json():
         return {
             'name': app.state.WEBUI_NAME,
             'short_name': app.state.WEBUI_NAME,
-            'description': f'{app.state.WEBUI_NAME} is an open, extensible, user-friendly interface for AI that adapts to your workflow.',
+            'description': f'{app.state.WEBUI_NAME} is the QLCode AI chat workspace.',
             'start_url': '/',
             'display': 'standalone',
             'background_color': '#343541',
             'icons': [
                 {
-                    'src': '/static/logo.png',
+                    'src': '/static/web-app-manifest-192x192.png',
                     'type': 'image/png',
-                    'sizes': '500x500',
+                    'sizes': '192x192',
                     'purpose': 'any',
                 },
                 {
-                    'src': '/static/logo.png',
+                    'src': '/static/web-app-manifest-512x512.png',
                     'type': 'image/png',
-                    'sizes': '500x500',
+                    'sizes': '512x512',
                     'purpose': 'maskable',
                 },
             ],
@@ -2833,7 +2794,7 @@ async def get_opensearch_xml():
     <ShortName>{app.state.WEBUI_NAME}</ShortName>
     <Description>Search {app.state.WEBUI_NAME}</Description>
     <InputEncoding>UTF-8</InputEncoding>
-    <Image width="16" height="16" type="image/x-icon">{app.state.config.WEBUI_URL}/static/favicon.png</Image>
+    <Image width="16" height="16" type="image/x-icon">{app.state.config.WEBUI_URL}/static/favicon.png?v=qlcode</Image>
     <Url type="text/html" method="get" template="{app.state.config.WEBUI_URL}/?q={'{searchTerms}'}"/>
     <moz:SearchForm>{app.state.config.WEBUI_URL}</moz:SearchForm>
     </OpenSearchDescription>
@@ -2900,7 +2861,7 @@ async def healthcheck_with_db():
     await async_db_ping()
     return {'status': True}
 
-
+mimetypes.add_type('image/webp', '.webp')
 app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
 
 
@@ -2930,7 +2891,7 @@ def swagger_ui_html(*args, **kwargs):
         **kwargs,
         swagger_js_url='/static/swagger-ui/swagger-ui-bundle.js',
         swagger_css_url='/static/swagger-ui/swagger-ui.css',
-        swagger_favicon_url='/static/swagger-ui/favicon.png',
+        swagger_favicon_url='/static/favicon.png?v=qlcode',
     )
 
 

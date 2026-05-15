@@ -6,10 +6,8 @@ import json
 import logging
 import mimetypes
 import re
-from pathlib import Path
 from typing import Optional
 
-from urllib.parse import quote
 import aiohttp
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
@@ -28,17 +26,14 @@ from open_webui.utils.session_pool import get_session
 from open_webui.models.chats import Chats
 from open_webui.routers.files import upload_file_handler, get_file_content_by_id
 from open_webui.utils.auth import get_admin_user, get_verified_user
-from open_webui.utils.access_control import has_permission
 from open_webui.utils.headers import include_user_info_headers
-from open_webui.internal.db import get_async_session
-from sqlalchemy.ext.asyncio import AsyncSession
-from open_webui.utils.images.comfyui import (
-    ComfyUICreateImageForm,
-    ComfyUIEditImageForm,
-    ComfyUIWorkflow,
-    comfyui_upload_image,
-    comfyui_create_image,
-    comfyui_edit_image,
+from open_webui.utils.qlcode import (
+    QLCODE_API_BASE_URL,
+    QLCODE_IMAGE_GENERATION_MODEL,
+    QLCODE_IMAGE_GENERATION_SIZE,
+    get_required_user_qlcode_api_key,
+    qlcode_api_headers,
+    qlcode_error_detail,
 )
 from pydantic import BaseModel
 
@@ -351,80 +346,7 @@ async def verify_url(request: Request, user=Depends(get_admin_user)):
 
 @router.get('/models')
 async def get_models(request: Request, user=Depends(get_verified_user)):
-    try:
-        if request.app.state.config.IMAGE_GENERATION_ENGINE == 'openai':
-            return [
-                {'id': 'dall-e-2', 'name': 'DALL·E 2'},
-                {'id': 'dall-e-3', 'name': 'DALL·E 3'},
-                {'id': 'gpt-image-1', 'name': 'GPT-IMAGE 1'},
-                {'id': 'gpt-image-1.5', 'name': 'GPT-IMAGE 1.5'},
-            ]
-        elif request.app.state.config.IMAGE_GENERATION_ENGINE == 'gemini':
-            return [
-                {'id': 'imagen-3.0-generate-002', 'name': 'imagen-3.0 generate-002'},
-            ]
-        elif request.app.state.config.IMAGE_GENERATION_ENGINE == 'comfyui':
-            # TODO - get models from comfyui
-            headers = {'Authorization': f'Bearer {request.app.state.config.COMFYUI_API_KEY}'}
-            session = await get_session()
-            async with session.get(
-                url=f'{request.app.state.config.COMFYUI_BASE_URL}/object_info',
-                headers=headers,
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                info = await r.json()
-
-            workflow = json.loads(request.app.state.config.COMFYUI_WORKFLOW)
-            model_node_id = None
-
-            for node in request.app.state.config.COMFYUI_WORKFLOW_NODES:
-                if node['type'] == 'model':
-                    if node['node_ids']:
-                        model_node_id = node['node_ids'][0]
-                    break
-
-            if model_node_id:
-                model_list_key = None
-
-                log.info(workflow[model_node_id]['class_type'])
-                for key in info[workflow[model_node_id]['class_type']]['input']['required']:
-                    if '_name' in key:
-                        model_list_key = key
-                        break
-
-                if model_list_key:
-                    return list(
-                        map(
-                            lambda model: {'id': model, 'name': model},
-                            info[workflow[model_node_id]['class_type']]['input']['required'][model_list_key][0],
-                        )
-                    )
-            else:
-                return list(
-                    map(
-                        lambda model: {'id': model, 'name': model},
-                        info['CheckpointLoaderSimple']['input']['required']['ckpt_name'][0],
-                    )
-                )
-        elif (
-            request.app.state.config.IMAGE_GENERATION_ENGINE == 'automatic1111'
-            or request.app.state.config.IMAGE_GENERATION_ENGINE == ''
-        ):
-            session = await get_session()
-            async with session.get(
-                url=f'{request.app.state.config.AUTOMATIC1111_BASE_URL}/sdapi/v1/sd-models',
-                headers={'authorization': get_automatic1111_api_auth(request)},
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                models = await r.json()
-            return list(
-                map(
-                    lambda model: {'id': model['title'], 'name': model['model_name']},
-                    models,
-                )
-            )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=ERROR_MESSAGES.DEFAULT(e))
+    return [{'id': QLCODE_IMAGE_GENERATION_MODEL, 'name': 'GPT-IMAGE 2'}]
 
 
 class CreateImageForm(BaseModel):
@@ -508,20 +430,6 @@ async def upload_image(request, image_data, content_type, metadata, user, db=Non
 
 @router.post('/generations')
 async def generate_images(request: Request, form_data: CreateImageForm, user=Depends(get_verified_user)):
-    if not request.app.state.config.ENABLE_IMAGE_GENERATION:
-        raise HTTPException(
-            status_code=403,
-            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
-        )
-
-    if user.role != 'admin' and not await has_permission(
-        user.id, 'features.image_generation', request.app.state.config.USER_PERMISSIONS
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
-        )
-
     return await image_generations(request, form_data, user=user)
 
 
@@ -531,241 +439,67 @@ async def image_generations(
     metadata: Optional[dict] = None,
     user=None,
 ):
-    # if IMAGE_SIZE = 'auto', default WidthxHeight to the 512x512 default
-    # This is only relevant when the user has set IMAGE_SIZE to 'auto' with an
-    # image model other than gpt-image-1, which is warned about on settings save
-
-    size = '512x512'
-    if request.app.state.config.IMAGE_SIZE and 'x' in request.app.state.config.IMAGE_SIZE:
-        size = request.app.state.config.IMAGE_SIZE
-
-    if form_data.size and 'x' in form_data.size:
-        size = form_data.size
-
-    width, height = tuple(map(int, size.split('x')))
-
     metadata = metadata or {}
+    qlcode_api_key = get_required_user_qlcode_api_key(user)
+    model = QLCODE_IMAGE_GENERATION_MODEL
+    size = form_data.size or QLCODE_IMAGE_GENERATION_SIZE
 
-    model = await get_image_model(request)
+    if size != 'auto' and not re.match(r'^\d+x\d+$', size):
+        raise HTTPException(
+            status_code=400,
+            detail=ERROR_MESSAGES.INCORRECT_FORMAT('  (e.g., 1024x1024).'),
+        )
 
     try:
-        if request.app.state.config.IMAGE_GENERATION_ENGINE == 'openai':
-            headers = {
-                'Authorization': f'Bearer {request.app.state.config.IMAGES_OPENAI_API_KEY}',
-                'Content-Type': 'application/json',
-            }
+        # User-facing image generation uses the user's fixed QLCodeAPI connection.
+        headers = qlcode_api_headers(qlcode_api_key)
 
-            if ENABLE_FORWARD_USER_INFO_HEADERS:
-                headers = include_user_info_headers(headers, user)
+        if ENABLE_FORWARD_USER_INFO_HEADERS:
+            headers = include_user_info_headers(headers, user)
 
-            url = f'{request.app.state.config.IMAGES_OPENAI_API_BASE_URL}/images/generations'
-            if request.app.state.config.IMAGES_OPENAI_API_VERSION:
-                url = f'{url}?api-version={request.app.state.config.IMAGES_OPENAI_API_VERSION}'
-
-            data = {
-                'model': model,
-                'prompt': form_data.prompt,
-                'n': form_data.n,
-                **(
-                    {'size': form_data.size or request.app.state.config.IMAGE_SIZE}
-                    if (form_data.size or request.app.state.config.IMAGE_SIZE)
-                    else {}
-                ),
-                **(
-                    {}
-                    if re.match(
-                        IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN,
-                        request.app.state.config.IMAGE_GENERATION_MODEL,
-                    )
-                    else {'response_format': 'b64_json'}
-                ),
-                **(
-                    {}
-                    if not request.app.state.config.IMAGES_OPENAI_API_PARAMS
-                    else request.app.state.config.IMAGES_OPENAI_API_PARAMS
-                ),
-            }
-
-            session = await get_session()
-            async with session.post(
-                url=url,
-                json=data,
-                headers=headers,
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                r.raise_for_status()
-                res = await r.json()
-
-            images = []
-
-            for image in res['data']:
-                if image_url := image.get('url', None):
-                    image_data, content_type = await get_image_data(
-                        image_url,
-                        {k: v for k, v in headers.items() if k != 'Content-Type'},
-                    )
-                else:
-                    image_data, content_type = await get_image_data(image['b64_json'])
-
-                _, url = await upload_image(request, image_data, content_type, {**data, **metadata}, user)
-                images.append({'url': url})
-            return images
-
-        elif request.app.state.config.IMAGE_GENERATION_ENGINE == 'gemini':
-            headers = {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': request.app.state.config.IMAGES_GEMINI_API_KEY,
-            }
-
-            data = {}
-
-            if (
-                request.app.state.config.IMAGES_GEMINI_ENDPOINT_METHOD == ''
-                or request.app.state.config.IMAGES_GEMINI_ENDPOINT_METHOD == 'predict'
-            ):
-                model = f'{model}:predict'
-                data = {
-                    'instances': {'prompt': form_data.prompt},
-                    'parameters': {
-                        'sampleCount': form_data.n,
-                        'outputOptions': {'mimeType': 'image/png'},
-                    },
-                }
-
-            elif request.app.state.config.IMAGES_GEMINI_ENDPOINT_METHOD == 'generateContent':
-                model = f'{model}:generateContent'
-                data = {'contents': [{'parts': [{'text': form_data.prompt}]}]}
-
-            session = await get_session()
-            async with session.post(
-                url=f'{request.app.state.config.IMAGES_GEMINI_API_BASE_URL}/models/{model}',
-                json=data,
-                headers=headers,
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                r.raise_for_status()
-                res = await r.json()
-
-            images = []
-
-            if model.endswith(':predict'):
-                for image in res['predictions']:
-                    image_data, content_type = await get_image_data(image['bytesBase64Encoded'])
-                    _, url = await upload_image(request, image_data, content_type, {**data, **metadata}, user)
-                    images.append({'url': url})
-            elif model.endswith(':generateContent'):
-                for image in res['candidates']:
-                    for part in image['content']['parts']:
-                        if part.get('inlineData', {}).get('data'):
-                            image_data, content_type = await get_image_data(part['inlineData']['data'])
-                            _, url = await upload_image(
-                                request,
-                                image_data,
-                                content_type,
-                                {**data, **metadata},
-                                user,
-                            )
-                            images.append({'url': url})
-
-            return images
-
-        elif request.app.state.config.IMAGE_GENERATION_ENGINE == 'comfyui':
-            data = {
-                'prompt': form_data.prompt,
-                'width': width,
-                'height': height,
-                'n': form_data.n,
-            }
-
-            if request.app.state.config.IMAGE_STEPS is not None or form_data.steps is not None:
-                data['steps'] = form_data.steps if form_data.steps is not None else request.app.state.config.IMAGE_STEPS
-
-            if form_data.negative_prompt is not None:
-                data['negative_prompt'] = form_data.negative_prompt
-
-            form_data = ComfyUICreateImageForm(
-                **{
-                    'workflow': ComfyUIWorkflow(
-                        **{
-                            'workflow': request.app.state.config.COMFYUI_WORKFLOW,
-                            'nodes': request.app.state.config.COMFYUI_WORKFLOW_NODES,
-                        }
-                    ),
-                    **data,
-                }
-            )
-            res = await comfyui_create_image(
-                model,
-                form_data,
-                str(uuid.uuid4()),
-                request.app.state.config.COMFYUI_BASE_URL,
-                request.app.state.config.COMFYUI_API_KEY,
-            )
-            log.debug(f'res: {res}')
-
-            images = []
-
-            for image in res['data']:
-                headers = None
-                if request.app.state.config.COMFYUI_API_KEY:
-                    headers = {'Authorization': f'Bearer {request.app.state.config.COMFYUI_API_KEY}'}
-
-                image_data, content_type = await get_image_data(image['url'], headers)
-                _, url = await upload_image(
-                    request,
-                    image_data,
-                    content_type,
-                    {**form_data.model_dump(exclude_none=True), **metadata},
-                    user,
+        data = {
+            'model': model,
+            'prompt': form_data.prompt,
+            'n': form_data.n,
+            'size': size,
+            **(
+                {}
+                if re.match(
+                    IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN,
+                    model,
                 )
-                images.append({'url': url})
-            return images
-        elif (
-            request.app.state.config.IMAGE_GENERATION_ENGINE == 'automatic1111'
-            or request.app.state.config.IMAGE_GENERATION_ENGINE == ''
-        ):
-            if form_data.model:
-                await set_image_model(request, form_data.model)
+                else {'response_format': 'b64_json'}
+            ),
+        }
 
-            data = {
-                'prompt': form_data.prompt,
-                'batch_size': form_data.n,
-                'width': width,
-                'height': height,
-            }
+        session = await get_session()
+        async with session.post(
+            url=f'{QLCODE_API_BASE_URL}/images/generations',
+            json=data,
+            headers=headers,
+            ssl=AIOHTTP_CLIENT_SESSION_SSL,
+        ) as r:
+            if r.status >= 400:
+                raise HTTPException(status_code=r.status, detail=await qlcode_error_detail(r))
+            res = await r.json()
 
-            if request.app.state.config.IMAGE_STEPS is not None or form_data.steps is not None:
-                data['steps'] = form_data.steps if form_data.steps is not None else request.app.state.config.IMAGE_STEPS
+        images = []
 
-            if form_data.negative_prompt is not None:
-                data['negative_prompt'] = form_data.negative_prompt
-
-            if request.app.state.config.AUTOMATIC1111_PARAMS:
-                data = {**data, **request.app.state.config.AUTOMATIC1111_PARAMS}
-
-            session = await get_session()
-            async with session.post(
-                url=f'{request.app.state.config.AUTOMATIC1111_BASE_URL}/sdapi/v1/txt2img',
-                json=data,
-                headers={'authorization': get_automatic1111_api_auth(request)},
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                res = await r.json()
-            log.debug(f'res: {res}')
-
-            images = []
-
-            for image in res['images']:
-                image_data, content_type = await get_image_data(image)
-                _, url = await upload_image(
-                    request,
-                    image_data,
-                    content_type,
-                    {**data, 'info': res['info'], **metadata},
-                    user,
+        for image in res['data']:
+            if image_url := image.get('url', None):
+                image_data, content_type = await get_image_data(
+                    image_url,
+                    {k: v for k, v in headers.items() if k != 'Content-Type'},
                 )
-                images.append({'url': url})
-            return images
+            else:
+                image_data, content_type = await get_image_data(image['b64_json'])
+
+            _, url = await upload_image(request, image_data, content_type, {**data, **metadata}, user)
+            images.append({'url': url})
+        return images
+
+    except HTTPException:
+        raise
     except Exception as e:
         error = e
         if isinstance(e, aiohttp.ClientResponseError):
@@ -790,17 +524,17 @@ async def image_edits(
     metadata: Optional[dict] = None,
     user=Depends(get_verified_user),
 ):
-    size = None
-    width, height = None, None
+    size = form_data.size
     metadata = metadata or {}
 
-    if (request.app.state.config.IMAGE_EDIT_SIZE and 'x' in request.app.state.config.IMAGE_EDIT_SIZE) or (
-        form_data.size and 'x' in form_data.size
-    ):
-        size = form_data.size if form_data.size else request.app.state.config.IMAGE_EDIT_SIZE
-        width, height = tuple(map(int, size.split('x')))
+    if size and size != 'auto' and not re.match(r'^\d+x\d+$', size):
+        raise HTTPException(
+            status_code=400,
+            detail=ERROR_MESSAGES.INCORRECT_FORMAT('  (e.g., 1024x1024).'),
+        )
 
-    model = request.app.state.config.IMAGE_EDIT_MODEL if form_data.model is None else form_data.model
+    qlcode_api_key = get_required_user_qlcode_api_key(user)
+    model = QLCODE_IMAGE_GENERATION_MODEL
 
     try:
 
@@ -867,216 +601,82 @@ async def image_edits(
         )
 
     try:
-        if request.app.state.config.IMAGE_EDIT_ENGINE == 'openai':
-            headers = {
-                'Authorization': f'Bearer {request.app.state.config.IMAGES_EDIT_OPENAI_API_KEY}',
-            }
+        # User-facing image editing uses the user's fixed QLCodeAPI connection.
+        headers = qlcode_api_headers(qlcode_api_key, content_type=None)
 
-            if ENABLE_FORWARD_USER_INFO_HEADERS:
-                headers = include_user_info_headers(headers, user)
+        if ENABLE_FORWARD_USER_INFO_HEADERS:
+            headers = include_user_info_headers(headers, user)
 
-            data = {
-                'model': model,
-                'prompt': form_data.prompt,
-                **({'n': form_data.n} if form_data.n else {}),
-                **({'size': size} if size else {}),
-                **({'background': form_data.background} if form_data.background else {}),
-                **(
-                    {}
-                    if re.match(
-                        IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN,
-                        request.app.state.config.IMAGE_EDIT_MODEL,
-                    )
-                    else {'response_format': 'b64_json'}
-                ),
-            }
-
-            files = []
-            if isinstance(form_data.image, str):
-                files = [get_image_file_item(form_data.image)]
-            elif isinstance(form_data.image, list):
-                for img in form_data.image:
-                    files.append(get_image_file_item(img, 'image[]'))
-
-            url_search_params = ''
-            if request.app.state.config.IMAGES_EDIT_OPENAI_API_VERSION:
-                url_search_params += f'?api-version={request.app.state.config.IMAGES_EDIT_OPENAI_API_VERSION}'
-
-            # Build multipart form data for aiohttp
-            form = aiohttp.FormData()
-            for key, value in data.items():
-                if isinstance(value, dict):
-                    form.add_field(key, json.dumps(value))
-                else:
-                    form.add_field(key, str(value))
-            for param_name, (filename, file_obj, content_type_val) in files:
-                form.add_field(
-                    param_name,
-                    file_obj,
-                    filename=filename,
-                    content_type=content_type_val,
+        data = {
+            'model': model,
+            'prompt': form_data.prompt,
+            **({'n': form_data.n} if form_data.n else {}),
+            **({'size': size} if size else {}),
+            **({'background': form_data.background} if form_data.background else {}),
+            **(
+                {}
+                if re.match(
+                    IMAGE_URL_RESPONSE_MODELS_REGEX_PATTERN,
+                    model,
                 )
+                else {'response_format': 'b64_json'}
+            ),
+        }
 
-            session = await get_session()
-            async with session.post(
-                url=f'{request.app.state.config.IMAGES_EDIT_OPENAI_API_BASE_URL}/images/edits{url_search_params}',
-                headers=headers,
-                data=form,
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                r.raise_for_status()
-                res = await r.json()
+        files = []
+        if isinstance(form_data.image, str):
+            files = [get_image_file_item(form_data.image)]
+        elif isinstance(form_data.image, list):
+            for img in form_data.image:
+                files.append(get_image_file_item(img, 'image[]'))
 
-            images = []
-            for image in res['data']:
-                if image_url := image.get('url', None):
-                    image_data, content_type = await get_image_data(
-                        image_url,
-                        {k: v for k, v in headers.items() if k != 'Content-Type'},
-                    )
-                else:
-                    image_data, content_type = await get_image_data(image['b64_json'])
-
-                _, url = await upload_image(request, image_data, content_type, {**data, **metadata}, user)
-                images.append({'url': url})
-            return images
-
-        elif request.app.state.config.IMAGE_EDIT_ENGINE == 'gemini':
-            headers = {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': request.app.state.config.IMAGES_EDIT_GEMINI_API_KEY,
-            }
-
-            model = f'{model}:generateContent'
-            data = {'contents': [{'parts': [{'text': form_data.prompt}]}]}
-
-            if isinstance(form_data.image, str):
-                data['contents'][0]['parts'].append(
-                    {
-                        'inline_data': {
-                            'mime_type': 'image/png',
-                            'data': form_data.image.split(',', 1)[1],
-                        }
-                    }
-                )
-            elif isinstance(form_data.image, list):
-                data['contents'][0]['parts'].extend(
-                    [
-                        {
-                            'inline_data': {
-                                'mime_type': 'image/png',
-                                'data': image.split(',', 1)[1],
-                            }
-                        }
-                        for image in form_data.image
-                    ]
-                )
-
-            session = await get_session()
-            async with session.post(
-                url=f'{request.app.state.config.IMAGES_EDIT_GEMINI_API_BASE_URL}/models/{model}',
-                json=data,
-                headers=headers,
-                ssl=AIOHTTP_CLIENT_SESSION_SSL,
-            ) as r:
-                r.raise_for_status()
-                res = await r.json()
-
-            images = []
-            for image in res['candidates']:
-                for part in image['content']['parts']:
-                    if part.get('inlineData', {}).get('data'):
-                        image_data, content_type = await get_image_data(part['inlineData']['data'])
-                        _, url = await upload_image(
-                            request,
-                            image_data,
-                            content_type,
-                            {**data, **metadata},
-                            user,
-                        )
-                        images.append({'url': url})
-
-            return images
-
-        elif request.app.state.config.IMAGE_EDIT_ENGINE == 'comfyui':
-            try:
-                files = []
-                if isinstance(form_data.image, str):
-                    files = [get_image_file_item(form_data.image)]
-                elif isinstance(form_data.image, list):
-                    for img in form_data.image:
-                        files.append(get_image_file_item(img))
-
-                # Upload images to ComfyUI and get their names
-                comfyui_images = []
-                for file_item in files:
-                    res = await comfyui_upload_image(
-                        file_item,
-                        request.app.state.config.IMAGES_EDIT_COMFYUI_BASE_URL,
-                        request.app.state.config.IMAGES_EDIT_COMFYUI_API_KEY,
-                    )
-                    comfyui_images.append(res.get('name', file_item[1][0]))
-            except Exception as e:
-                log.debug(f'Error uploading images to ComfyUI: {e}')
-                raise Exception('Failed to upload images to ComfyUI.')
-
-            data = {
-                'image': comfyui_images,
-                'prompt': form_data.prompt,
-                **({'width': width} if width is not None else {}),
-                **({'height': height} if height is not None else {}),
-                **({'n': form_data.n} if form_data.n else {}),
-            }
-
-            form_data = ComfyUIEditImageForm(
-                **{
-                    'workflow': ComfyUIWorkflow(
-                        **{
-                            'workflow': request.app.state.config.IMAGES_EDIT_COMFYUI_WORKFLOW,
-                            'nodes': request.app.state.config.IMAGES_EDIT_COMFYUI_WORKFLOW_NODES,
-                        }
-                    ),
-                    **data,
-                }
+        form = aiohttp.FormData()
+        for key, value in data.items():
+            if isinstance(value, dict):
+                form.add_field(key, json.dumps(value))
+            else:
+                form.add_field(key, str(value))
+        for param_name, (filename, file_obj, content_type_val) in files:
+            form.add_field(
+                param_name,
+                file_obj,
+                filename=filename,
+                content_type=content_type_val,
             )
-            res = await comfyui_edit_image(
-                model,
-                form_data,
-                str(uuid.uuid4()),
-                request.app.state.config.IMAGES_EDIT_COMFYUI_BASE_URL,
-                request.app.state.config.IMAGES_EDIT_COMFYUI_API_KEY,
-            )
-            log.debug(f'res: {res}')
 
-            image_urls = set()
-            for image in res['data']:
-                image_urls.add(image['url'])
-            image_urls = list(image_urls)
+        session = await get_session()
+        async with session.post(
+            url=f'{QLCODE_API_BASE_URL}/images/edits',
+            headers=headers,
+            data=form,
+            ssl=AIOHTTP_CLIENT_SESSION_SSL,
+        ) as r:
+            if r.status >= 400:
+                raise HTTPException(status_code=r.status, detail=await qlcode_error_detail(r))
+            res = await r.json()
 
-            # Prioritize output type URLs if available
-            output_type_urls = [url for url in image_urls if 'type=output' in url]
-            if output_type_urls:
-                image_urls = output_type_urls
-
-            log.debug(f'Image URLs: {image_urls}')
-            images = []
-
-            for image_url in image_urls:
-                headers = None
-                if request.app.state.config.IMAGES_EDIT_COMFYUI_API_KEY:
-                    headers = {'Authorization': f'Bearer {request.app.state.config.IMAGES_EDIT_COMFYUI_API_KEY}'}
-
-                image_data, content_type = await get_image_data(image_url, headers)
-                _, url = await upload_image(
-                    request,
-                    image_data,
-                    content_type,
-                    {**form_data.model_dump(exclude_none=True), **metadata},
-                    user,
+        images = []
+        for image in res['data']:
+            if image_url := image.get('url', None):
+                image_data, content_type = await get_image_data(
+                    image_url,
+                    headers,
                 )
-                images.append({'url': url})
+            else:
+                image_data, content_type = await get_image_data(image['b64_json'])
 
-            return images
+            _, url = await upload_image(
+                request,
+                image_data,
+                content_type,
+                {**data, **metadata},
+                user,
+            )
+            images.append({'url': url})
+        return images
+
+    except HTTPException:
+        raise
     except Exception as e:
         error = e
         if isinstance(e, aiohttp.ClientResponseError):

@@ -1,4 +1,9 @@
-import { OPENAI_API_BASE_URL, WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+import {
+	OPENAI_API_BASE_URL,
+	QLCODE_API_BASE_URL,
+	WEBUI_API_BASE_URL,
+	WEBUI_BASE_URL
+} from '$lib/constants';
 
 export const getOpenAIConfig = async (token: string = '') => {
 	let error = null;
@@ -210,6 +215,36 @@ export const updateOpenAIKeys = async (token: string = '', keys: string[]) => {
 
 export const getOpenAIModelsDirect = async (url: string, key: string) => {
 	let error = null;
+	const normalizedUrl = url.replace(/\/$/, '');
+	const appToken = typeof localStorage !== 'undefined' ? localStorage.token : '';
+
+	if (normalizedUrl === QLCODE_API_BASE_URL) {
+		const res = await fetch(`${WEBUI_API_BASE_URL}/users/user/direct/models`, {
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				...(appToken && { authorization: `Bearer ${appToken}` })
+			},
+			body: JSON.stringify({
+				api_key: key
+			})
+		})
+			.then(async (res) => {
+				if (!res.ok) throw await res.json();
+				return res.json();
+			})
+			.catch((err) => {
+				error = `QLCodeAPI: ${err?.detail ?? err?.error?.message ?? 'Network Problem'}`;
+				return [];
+			});
+
+		if (error) {
+			throw error;
+		}
+
+		return res;
+	}
 
 	const res = await fetch(`${url}/models`, {
 		method: 'GET',
@@ -337,6 +372,34 @@ export const chatCompletion = async (
 ): Promise<[Response | null, AbortController]> => {
 	const controller = new AbortController();
 	let error = null;
+	const normalizedUrl = url.replace(/\/$/, '');
+	const appToken = typeof localStorage !== 'undefined' ? localStorage.token : '';
+
+	if (normalizedUrl === QLCODE_API_BASE_URL) {
+		const res = await fetch(`${WEBUI_API_BASE_URL}/users/user/direct/chat/completions`, {
+			signal: controller.signal,
+			method: 'POST',
+			headers: {
+				Accept: 'application/json',
+				'Content-Type': 'application/json',
+				...(appToken && { authorization: `Bearer ${appToken}` })
+			},
+			body: JSON.stringify({
+				api_key: token,
+				payload: body
+			})
+		}).catch((err) => {
+			console.error(err);
+			error = err;
+			return null;
+		});
+
+		if (error) {
+			throw error;
+		}
+
+		return [res, controller];
+	}
 
 	const res = await fetch(`${url}/chat/completions`, {
 		signal: controller.signal,

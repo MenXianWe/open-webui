@@ -1,6 +1,6 @@
 {
-  "name": "Open WebUI",
-  "short_name": "WebUI",
+  "name": "QLCodeChat",
+  "short_name": "QLCodeChat",
   "icons": [
     {
       "src": "/static/web-app-manifest-192x192.png",

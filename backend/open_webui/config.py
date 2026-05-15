@@ -286,7 +286,7 @@ class AppConfig:
         redis_url: Optional[str] = None,
         redis_sentinels: Optional[list] = [],
         redis_cluster: Optional[bool] = False,
-        redis_key_prefix: str = 'open-webui',
+        redis_key_prefix: str = 'qlcode-chat',
     ):
         if redis_url:
             super().__setattr__('_redis_key_prefix', redis_key_prefix)
@@ -394,7 +394,7 @@ JWT_EXPIRES_IN = PersistentConfig('JWT_EXPIRES_IN', 'auth.jwt_expiry', os.enviro
 if JWT_EXPIRES_IN.value == '-1':
     log.warning(
         "⚠️  SECURITY WARNING: JWT_EXPIRES_IN is set to '-1'\n"
-        '    See: https://docs.openwebui.com/reference/env-configuration\n'
+        '    Review JWT_EXPIRES_IN before using persistent sessions.\n'
     )
 
 ####################################
@@ -914,26 +914,28 @@ load_oauth_providers()
 ####################################
 
 STATIC_DIR = Path(os.getenv('STATIC_DIR', OPEN_WEBUI_DIR / 'static')).resolve()
+FRONTEND_STATIC_DIR = FRONTEND_BUILD_DIR / 'static'
 
-try:
-    if STATIC_DIR.exists():
-        for item in STATIC_DIR.iterdir():
-            if item.is_file() or item.is_symlink():
-                try:
-                    item.unlink()
-                except Exception as e:
-                    pass
-except Exception as e:
-    pass
+if FRONTEND_STATIC_DIR.exists():
+    try:
+        if STATIC_DIR.exists():
+            for item in STATIC_DIR.iterdir():
+                if item.is_file() or item.is_symlink():
+                    try:
+                        item.unlink()
+                    except Exception as e:
+                        pass
+    except Exception as e:
+        pass
 
-for file_path in (FRONTEND_BUILD_DIR / 'static').glob('**/*'):
-    if file_path.is_file():
-        target_path = STATIC_DIR / file_path.relative_to((FRONTEND_BUILD_DIR / 'static'))
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            shutil.copyfile(file_path, target_path)
-        except Exception as e:
-            logging.error(f'An error occurred: {e}')
+    for file_path in FRONTEND_STATIC_DIR.glob('**/*'):
+        if file_path.is_file():
+            target_path = STATIC_DIR / file_path.relative_to(FRONTEND_STATIC_DIR)
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copyfile(file_path, target_path)
+            except Exception as e:
+                logging.error(f'An error occurred: {e}')
 
 frontend_favicon = FRONTEND_BUILD_DIR / 'static' / 'favicon.png'
 
@@ -958,43 +960,6 @@ if frontend_loader.exists():
         shutil.copyfile(frontend_loader, STATIC_DIR / 'loader.js')
     except Exception as e:
         logging.error(f'An error occurred: {e}')
-
-
-####################################
-# CUSTOM_NAME (Legacy)
-####################################
-
-CUSTOM_NAME = os.environ.get('CUSTOM_NAME', '')
-
-if CUSTOM_NAME:
-    try:
-        r = requests.get(f'https://api.openwebui.com/api/v1/custom/{CUSTOM_NAME}')
-        data = r.json()
-        if r.ok:
-            if 'logo' in data:
-                WEBUI_FAVICON_URL = url = (
-                    f'https://api.openwebui.com{data["logo"]}' if data['logo'][0] == '/' else data['logo']
-                )
-
-                r = requests.get(url, stream=True)
-                if r.status_code == 200:
-                    with open(f'{STATIC_DIR}/favicon.png', 'wb') as f:
-                        r.raw.decode_content = True
-                        shutil.copyfileobj(r.raw, f)
-
-            if 'splash' in data:
-                url = f'https://api.openwebui.com{data["splash"]}' if data['splash'][0] == '/' else data['splash']
-
-                r = requests.get(url, stream=True)
-                if r.status_code == 200:
-                    with open(f'{STATIC_DIR}/splash.png', 'wb') as f:
-                        r.raw.decode_content = True
-                        shutil.copyfileobj(r.raw, f)
-
-            WEBUI_NAME = data['name']
-    except Exception as e:
-        log.exception(e)
-        pass
 
 
 ####################################
@@ -1044,7 +1009,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 ENABLE_DIRECT_CONNECTIONS = PersistentConfig(
     'ENABLE_DIRECT_CONNECTIONS',
     'direct.enable',
-    os.environ.get('ENABLE_DIRECT_CONNECTIONS', 'False').lower() == 'true',
+    os.environ.get('ENABLE_DIRECT_CONNECTIONS', 'True').lower() == 'true',
 )
 
 ####################################
@@ -1074,13 +1039,13 @@ if OLLAMA_BASE_URL == '' and OLLAMA_API_BASE_URL != '':
 if ENV == 'prod':
     if OLLAMA_BASE_URL == '/ollama' and not K8S_FLAG:
         if USE_OLLAMA_DOCKER.lower() == 'true':
-            # if you use all-in-one docker container (Open WebUI + Ollama)
+            # if you use all-in-one docker container (QLCodeChat + Ollama)
             # with the docker build arg USE_OLLAMA=true (--build-arg="USE_OLLAMA=true") this only works with http://localhost:11434
             OLLAMA_BASE_URL = 'http://localhost:11434'
         else:
             OLLAMA_BASE_URL = 'http://host.docker.internal:11434'
     elif K8S_FLAG:
-        OLLAMA_BASE_URL = 'http://ollama-service.open-webui.svc.cluster.local:11434'
+        OLLAMA_BASE_URL = 'http://ollama-service.qlcode-chat.svc.cluster.local:11434'
 
 
 def _resolve_ollama_base_url(url: str) -> str:
@@ -1232,7 +1197,7 @@ except Exception:
     TERMINAL_PROXY_HEADERS = {}
 
 ####################################
-# WEBUI
+# Application
 ####################################
 
 
@@ -1717,7 +1682,7 @@ DEFAULT_ARENA_MODEL = {
     'id': 'arena-model',
     'name': 'Arena Model',
     'meta': {
-        'profile_image_url': '/favicon.png',
+        'profile_image_url': '/static/qlcode-login/app-logo.webp',
         'description': 'Submit your questions to anonymous AI chatbots and vote on the best response.',
         'model_ids': None,
     },
@@ -2437,7 +2402,7 @@ QDRANT_GRPC_PORT = int(os.environ.get('QDRANT_GRPC_PORT', '6334'))
 QDRANT_TIMEOUT = int(os.environ.get('QDRANT_TIMEOUT', '5'))
 QDRANT_HNSW_M = int(os.environ.get('QDRANT_HNSW_M', '16'))
 ENABLE_QDRANT_MULTITENANCY_MODE = os.environ.get('ENABLE_QDRANT_MULTITENANCY_MODE', 'true').lower() == 'true'
-QDRANT_COLLECTION_PREFIX = os.environ.get('QDRANT_COLLECTION_PREFIX', 'open-webui')
+QDRANT_COLLECTION_PREFIX = os.environ.get('QDRANT_COLLECTION_PREFIX', 'qlcode-chat')
 
 WEAVIATE_HTTP_HOST = os.environ.get('WEAVIATE_HTTP_HOST', '')
 WEAVIATE_GRPC_HOST = os.environ.get('WEAVIATE_GRPC_HOST', '')
@@ -2607,7 +2572,7 @@ else:
 # Pinecone
 PINECONE_API_KEY = os.environ.get('PINECONE_API_KEY', None)
 PINECONE_ENVIRONMENT = os.environ.get('PINECONE_ENVIRONMENT', None)
-PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME', 'open-webui-index')
+PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME', 'qlcode-chat-index')
 PINECONE_DIMENSION = int(os.getenv('PINECONE_DIMENSION', 1536))  # or 3072, 1024, 768
 PINECONE_METRIC = os.getenv('PINECONE_METRIC', 'cosine')
 PINECONE_CLOUD = os.getenv('PINECONE_CLOUD', 'aws')  # or "gcp" or "azure"
@@ -3618,7 +3583,7 @@ YOUCOM_API_KEY = PersistentConfig(
 ENABLE_IMAGE_GENERATION = PersistentConfig(
     'ENABLE_IMAGE_GENERATION',
     'image_generation.enable',
-    os.environ.get('ENABLE_IMAGE_GENERATION', '').lower() == 'true',
+    os.environ.get('ENABLE_IMAGE_GENERATION', 'true').lower() == 'true',
 )
 
 IMAGE_GENERATION_ENGINE = PersistentConfig(
@@ -3630,7 +3595,7 @@ IMAGE_GENERATION_ENGINE = PersistentConfig(
 IMAGE_GENERATION_MODEL = PersistentConfig(
     'IMAGE_GENERATION_MODEL',
     'image_generation.model',
-    os.getenv('IMAGE_GENERATION_MODEL', ''),
+    os.getenv('IMAGE_GENERATION_MODEL', 'gpt-image-2'),
 )
 
 # Regex pattern for models that support IMAGE_SIZE = "auto".

@@ -1187,7 +1187,7 @@ Provide the enhanced notes in markdown format. Use markdown syntax for headings,
 							<div
 								class="w-full h-full fixed top-0 left-0 {streaming
 									? ''
-									: ' backdrop-blur-xs  bg-white/10 dark:bg-gray-900/10'} flex items-center justify-center z-10 cursor-not-allowed"
+									: '  bg-white/10 dark:bg-gray-900/10'} flex items-center justify-center z-10 cursor-not-allowed"
 							></div>
 						{/if}
 

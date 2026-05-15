@@ -1,12 +1,16 @@
 import logging
+import re
 from typing import Optional
+from functools import lru_cache
 from sqlalchemy.ext.asyncio import AsyncSession
 import base64
 import io
 
+import aiohttp
+from PIL import Image, ImageDraw, ImageFont
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import Response, StreamingResponse, FileResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 
@@ -29,7 +33,13 @@ from open_webui.models.users import (
 )
 
 from open_webui.constants import ERROR_MESSAGES
-from open_webui.env import ENABLE_PROFILE_IMAGE_URL_FORWARDING, PROFILE_IMAGE_ALLOWED_MIME_TYPES, STATIC_DIR
+from open_webui.env import (
+    AIOHTTP_CLIENT_SESSION_SSL,
+    AIOHTTP_CLIENT_TIMEOUT,
+    AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST,
+    ENABLE_PROFILE_IMAGE_URL_FORWARDING,
+    PROFILE_IMAGE_ALLOWED_MIME_TYPES,
+)
 from open_webui.internal.db import get_async_session
 
 
@@ -40,11 +50,83 @@ from open_webui.utils.auth import (
     validate_password,
 )
 from open_webui.utils.access_control import get_permissions, has_permission
+from open_webui.utils.qlcode import (
+    QLCODE_API_BASE_URL,
+    normalize_user_direct_connections,
+    qlcode_api_headers,
+    qlcode_error_detail,
+    validate_qlcode_api_key,
+)
 from open_webui.socket.main import disconnect_user_sessions
 
 log = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@lru_cache(maxsize=4)
+def _load_initials_font(size: int) -> ImageFont.ImageFont:
+    for font_name in ('DejaVuSans-Bold.ttf', 'Arial Bold.ttf', 'Arial.ttf'):
+        try:
+            return ImageFont.truetype(font_name, size)
+        except OSError:
+            continue
+
+    return ImageFont.load_default()
+
+
+def _profile_initials(name: str | None, email: str | None) -> str:
+    source = (name or email or '').strip()
+    if not source:
+        return 'U'
+
+    tokens = re.findall(r'\S+', source)
+    if len(tokens) > 1:
+        return f'{tokens[0][0]}{tokens[-1][0]}'.upper()
+
+    return source[0].upper()
+
+
+@lru_cache(maxsize=1024)
+def _initials_profile_image_bytes(name: str, email: str) -> bytes:
+    size = 100
+    image = Image.new('RGB', (size, size), '#F39C12')
+    draw = ImageDraw.Draw(image)
+    font = _load_initials_font(40)
+    initials = _profile_initials(name, email)
+    bbox = draw.textbbox((0, 0), initials, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+    draw.text(
+        ((size - text_width) / 2 - bbox[0], (size - text_height) / 2 - bbox[1]),
+        initials,
+        fill='#FFFFFF',
+        font=font,
+    )
+
+    image_buffer = io.BytesIO()
+    image.save(image_buffer, format='PNG')
+    return image_buffer.getvalue()
+
+
+def _initials_profile_image_response(user) -> Response:
+    return Response(
+        content=_initials_profile_image_bytes(user.name or '', user.email or ''),
+        media_type='image/png',
+        headers={
+            'Content-Disposition': 'inline',
+            'X-Content-Type-Options': 'nosniff',
+        },
+    )
+
+
+class QLCodeDirectAPIKeyForm(BaseModel):
+    api_key: str
+
+
+class QLCodeDirectChatCompletionForm(BaseModel):
+    api_key: str
+    payload: dict
 
 
 ############################
@@ -280,7 +362,7 @@ async def get_user_settings_by_session_user(
     user=Depends(get_verified_user), db: AsyncSession = Depends(get_async_session)
 ):
     # user already fetched by get_verified_user — no need to refetch
-    return user.settings
+    return normalize_user_direct_connections(user.settings)
 
 
 ############################
@@ -295,7 +377,7 @@ async def update_user_settings_by_session_user(
     user=Depends(get_verified_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    updated_user_settings = form_data.model_dump()
+    updated_user_settings = normalize_user_direct_connections(form_data)
     ui_settings = updated_user_settings.get('ui')
     if (
         user.role != 'admin'
@@ -402,6 +484,83 @@ async def update_user_info_by_session_user(
 
 
 ############################
+# QLCodeAPI Direct Proxy
+############################
+
+
+@router.post('/user/direct/models')
+async def get_user_direct_models(form_data: QLCodeDirectAPIKeyForm, user=Depends(get_verified_user)):
+    api_key = validate_qlcode_api_key(form_data.api_key)
+    timeout = aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT_MODEL_LIST)
+
+    try:
+        async with aiohttp.ClientSession(timeout=timeout, trust_env=True) as session:
+            async with session.get(
+                f'{QLCODE_API_BASE_URL}/models',
+                headers=qlcode_api_headers(api_key),
+                ssl=AIOHTTP_CLIENT_SESSION_SSL,
+            ) as response:
+                if not response.ok:
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=await qlcode_error_detail(response),
+                    )
+                return await response.json()
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception('Failed to fetch QLCodeAPI models')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'QLCodeAPI connection failed: {e}',
+        )
+
+
+@router.post('/user/direct/chat/completions')
+async def create_user_direct_chat_completion(
+    form_data: QLCodeDirectChatCompletionForm,
+    user=Depends(get_verified_user),
+):
+    api_key = validate_qlcode_api_key(form_data.api_key)
+    timeout = aiohttp.ClientTimeout(total=AIOHTTP_CLIENT_TIMEOUT)
+    session = aiohttp.ClientSession(timeout=timeout, trust_env=True)
+
+    try:
+        response = await session.post(
+            f'{QLCODE_API_BASE_URL}/chat/completions',
+            json=form_data.payload,
+            headers=qlcode_api_headers(api_key),
+            ssl=AIOHTTP_CLIENT_SESSION_SSL,
+        )
+    except Exception as e:
+        await session.close()
+        log.exception('Failed to connect to QLCodeAPI chat completions')
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f'QLCodeAPI connection failed: {e}',
+        )
+
+    if not response.ok:
+        detail = await qlcode_error_detail(response)
+        await session.close()
+        raise HTTPException(status_code=response.status, detail=detail)
+
+    async def stream_response():
+        try:
+            async for chunk in response.content.iter_chunked(8192):
+                yield chunk
+        finally:
+            response.release()
+            await session.close()
+
+    return StreamingResponse(
+        stream_response(),
+        status_code=response.status,
+        media_type=response.headers.get('Content-Type', 'application/json'),
+    )
+
+
+############################
 # GetUserById
 ############################
 
@@ -497,7 +656,7 @@ async def get_user_profile_image_by_id(user_id: str, user=Depends(get_verified_u
                     media_type = header.split(';')[0].lstrip('data:').lower()
 
                     if media_type not in PROFILE_IMAGE_ALLOWED_MIME_TYPES:
-                        return FileResponse(f'{STATIC_DIR}/user.png')
+                        return _initials_profile_image_response(user)
 
                     return StreamingResponse(
                         image_buffer,
@@ -509,7 +668,7 @@ async def get_user_profile_image_by_id(user_id: str, user=Depends(get_verified_u
                     )
                 except Exception as e:
                     pass
-        return FileResponse(f'{STATIC_DIR}/user.png')
+        return _initials_profile_image_response(user)
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

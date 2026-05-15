@@ -38,7 +38,7 @@
 	import ChatPlus from '../icons/ChatPlus.svelte';
 	import ChatCheck from '../icons/ChatCheck.svelte';
 	import Knobs from '../icons/Knobs.svelte';
-	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import { resolveUserProfileImage } from '$lib/utils';
 
 	const i18n = getContext('i18n');
 
@@ -61,6 +61,19 @@
 
 	let showShareChatModal = false;
 	let showDownloadChatModal = false;
+
+	const getCurrentUserProfileImageUrl = () =>
+		resolveUserProfileImage($user?.profile_image_url, $user?.name, $user?.email);
+
+	const useDefaultUserImage = (event: Event) => {
+		const image = event.currentTarget as HTMLImageElement;
+		const initialsImageUrl = getCurrentUserProfileImageUrl();
+		if (image.src === initialsImageUrl) {
+			return;
+		}
+
+		image.src = initialsImageUrl;
+	};
 </script>
 
 <ShareChatModal bind:show={showShareChatModal} chatId={$chatId} />
@@ -251,10 +264,11 @@
 								<div class=" self-center">
 									<span class="sr-only">{$i18n.t('User menu')}</span>
 									<img
-										src={`${WEBUI_API_BASE_URL}/users/${$user?.id}/profile/image`}
+										src={getCurrentUserProfileImageUrl()}
 										class="size-6 object-cover rounded-full"
 										alt=""
 										draggable="false"
+										on:error={useDefaultUserImage}
 									/>
 								</div>
 							</div>
@@ -272,33 +286,9 @@
 	{/if}
 
 	<div class="absolute top-[100%] left-0 right-0 h-fit">
-		{#if !history.currentId && !$chatId && ($banners.length > 0 || ($config?.license_metadata?.type ?? null) === 'trial' || (($config?.license_metadata?.seats ?? null) !== null && $config?.user_count > $config?.license_metadata?.seats))}
+		{#if !history.currentId && !$chatId && $banners.length > 0}
 			<div class=" w-full z-30">
 				<div class=" flex flex-col gap-1 w-full">
-					{#if ($config?.license_metadata?.type ?? null) === 'trial'}
-						<Banner
-							banner={{
-								type: 'info',
-								title: 'Trial License',
-								content: $i18n.t(
-									'You are currently using a trial license. Please contact support to upgrade your license.'
-								)
-							}}
-						/>
-					{/if}
-
-					{#if ($config?.license_metadata?.seats ?? null) !== null && $config?.user_count > $config?.license_metadata?.seats}
-						<Banner
-							banner={{
-								type: 'error',
-								title: 'License Error',
-								content: $i18n.t(
-									'Exceeded the number of seats in your license. Please contact support to increase the number of seats.'
-								)
-							}}
-						/>
-					{/if}
-
 					{#each $banners.filter((b) => ![...JSON.parse(localStorage.getItem('dismissedBannerIds') ?? '[]'), ...closedBannerIds].includes(b.id)) as banner (banner.id)}
 						<Banner
 							{banner}

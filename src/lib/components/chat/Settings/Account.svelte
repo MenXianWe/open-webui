@@ -4,11 +4,9 @@
 
 	import { user, config, settings } from '$lib/stores';
 	import { updateUserProfile, createAPIKey, getAPIKey, getSessionUser } from '$lib/apis/auths';
-	import { WEBUI_BASE_URL } from '$lib/constants';
 
 	import UpdatePassword from './Account/UpdatePassword.svelte';
-	import { getGravatarUrl } from '$lib/apis/utils';
-	import { generateInitialsImage, canvasPixelTest } from '$lib/utils';
+	import { generateInitialsImage } from '$lib/utils';
 	import { copyToClipboard } from '$lib/utils';
 	import Plus from '$lib/components/icons/Plus.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -43,9 +41,13 @@
 
 	const submitHandler = async () => {
 		if (name !== $user?.name) {
-			if (profileImageUrl === generateInitialsImage($user?.name) || profileImageUrl === '') {
+			if (profileImageUrl === generateInitialsImage($user?.name)) {
 				profileImageUrl = generateInitialsImage(name);
 			}
+		}
+
+		if (profileImageUrl === '') {
+			profileImageUrl = generateInitialsImage(name);
 		}
 
 		if (webhookUrl !== $settings?.notifications?.webhook_url) {

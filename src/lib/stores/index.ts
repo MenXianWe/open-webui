@@ -274,7 +274,6 @@ type Document = {
 };
 
 type Config = {
-	license_metadata: any;
 	status: boolean;
 	name: string;
 	version: string;

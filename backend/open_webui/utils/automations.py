@@ -297,7 +297,7 @@ def _resolve_model_terminal_id(app, model_id: str) -> Optional[str]:
 async def _set_terminal_cwd(app, server_id: str, user, cwd: str, chat_id: str) -> None:
     """Set the working directory on a terminal server via the proxy.
 
-    Routes through the open-webui terminal proxy endpoint so that
+    Routes through the qlcode-chat terminal proxy endpoint so that
     auth headers, orchestrator policy routing, and X-User-Id are
     handled correctly — same path the frontend uses.
     """
@@ -548,7 +548,7 @@ async def _check_calendar_alerts(app) -> None:
 
         # Send webhook notification if user has one configured
         try:
-            webui_name = getattr(app.state, 'WEBUI_NAME', 'Open WebUI')
+            webui_name = getattr(app.state, 'WEBUI_NAME', 'QLCodeChat')
             enable_user_webhooks = getattr(app.state.config, 'ENABLE_USER_WEBHOOKS', False)
 
             if enable_user_webhooks:

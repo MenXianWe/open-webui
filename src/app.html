@@ -2,25 +2,30 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<link rel="icon" type="image/png" href="/static/favicon.png" crossorigin="use-credentials" />
 		<link
 			rel="icon"
 			type="image/png"
-			href="/static/favicon-96x96.png"
+			href="/static/favicon.png?v=qlcode"
+			crossorigin="use-credentials"
+		/>
+		<link
+			rel="icon"
+			type="image/png"
+			href="/static/favicon-96x96.png?v=qlcode"
 			sizes="96x96"
 			crossorigin="use-credentials"
 		/>
 		<link
 			rel="icon"
 			type="image/svg+xml"
-			href="/static/favicon.svg"
+			href="/static/favicon.svg?v=qlcode"
 			crossorigin="use-credentials"
 		/>
-		<link rel="shortcut icon" href="/static/favicon.ico" crossorigin="use-credentials" />
+		<link rel="shortcut icon" href="/static/favicon.ico?v=qlcode" crossorigin="use-credentials" />
 		<link
 			rel="apple-touch-icon"
 			sizes="180x180"
-			href="/static/apple-touch-icon.png"
+			href="/static/apple-touch-icon.png?v=qlcode"
 			crossorigin="use-credentials"
 		/>
 		<link rel="manifest" href="/manifest.json" crossorigin="use-credentials" />
@@ -71,9 +76,11 @@
 					metaThemeColorTag.setAttribute('content', '#171717');
 				}
 
+				const splashLight = '/static/splash.png?v=qlcode';
+				const splashDark = '/static/splash-dark.png?v=qlcode';
 				const preloadHref = document.documentElement.classList.contains('dark')
-					? '/static/splash-dark.png'
-					: '/static/splash.png';
+					? splashDark
+					: splashLight;
 				const preload = document.createElement('link');
 				preload.rel = 'preload';
 				preload.as = 'image';
@@ -98,11 +105,12 @@
 
 				const logo = document.createElement('img');
 				logo.id = 'logo';
+				logo.alt = 'QLCodeChat';
 				logo.style =
 					'position: absolute; width: auto; height: 6rem; top: 44%; left: 50%; transform: translateX(-50%); display:block;';
 				logo.loading = 'eager';
 				logo.fetchPriority = 'high';
-				logo.src = isDarkMode ? '/static/splash-dark.png' : '/static/splash.png';
+				logo.src = isDarkMode ? splashDark : splashLight;
 
 				document.addEventListener('DOMContentLoaded', function () {
 					const splash = document.getElementById('splash-screen');
@@ -115,7 +123,7 @@
 			})();
 		</script>
 
-		<title>Open WebUI</title>
+		<title>QLCodeChat</title>
 
 		%sveltekit.head%
 	</head>
@@ -150,7 +158,8 @@
 				<img
 					id="logo-her"
 					style="width: auto; height: 13rem"
-					src="/static/splash.png"
+					src="/static/splash.png?v=qlcode"
+					alt="QLCodeChat"
 					loading="eager"
 					fetchpriority="high"
 					class="animate-pulse-fast"
@@ -225,7 +234,6 @@
 
 		html.her #logo-her {
 			display: block;
-			filter: invert(1);
 		}
 
 		html.her #progress-background {

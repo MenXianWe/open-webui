@@ -66,7 +66,7 @@ class ERROR_MESSAGES(str, Enum):
 
     MODEL_NOT_FOUND = lambda name='': f"Model '{name}' was not found"
     OPENAI_NOT_FOUND = lambda name='': 'OpenAI API was not found'
-    OLLAMA_NOT_FOUND = 'WebUI could not connect to Ollama'
+    OLLAMA_NOT_FOUND = 'QLCodeChat could not connect to Ollama'
     CREATE_API_KEY_ERROR = 'Oops! Something went wrong while creating your API key. Please try again later. If the issue persists, contact support for assistance.'
     API_KEY_CREATION_NOT_ALLOWED = 'API key creation is not allowed in the environment.'
 
@@ -98,7 +98,7 @@ class ERROR_MESSAGES(str, Enum):
 
     FEATURE_DISABLED = lambda name='': f'{name} is disabled'
     INPUT_TOO_LONG = lambda size='': f'Input prompt exceeds maximum length of {size}'
-    SERVER_CONNECTION_ERROR = 'Open WebUI: Server Connection Error'
+    SERVER_CONNECTION_ERROR = 'QLCodeChat: Server Connection Error'
     REQUIRED_FIELD_EMPTY = lambda name='': f'Required field {name} is empty'
     OAUTH_NOT_CONFIGURED = lambda name='': f"Provider '{name}' is not configured"
 

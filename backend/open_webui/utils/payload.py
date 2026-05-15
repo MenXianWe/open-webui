@@ -23,7 +23,7 @@ async def apply_system_prompt_to_body(
     if not system:
         return form_data
 
-    # Metadata (WebUI Usage)
+    # Metadata (application usage)
     if metadata:
         variables = metadata.get('variables', {})
         if variables:
@@ -59,13 +59,13 @@ def apply_model_params_to_body(params: dict, form_data: dict, mappings: dict[str
 
 def remove_open_webui_params(params: dict) -> dict:
     """
-    Removes OpenWebUI specific parameters from the provided dictionary.
+    Removes QLCodeChat specific parameters from the provided dictionary.
 
     Args:
         params (dict): The dictionary containing parameters.
 
     Returns:
-        dict: The modified dictionary with OpenWebUI parameters removed.
+        dict: The modified dictionary with QLCodeChat parameters removed.
     """
     open_webui_params = {
         'stream_response': bool,

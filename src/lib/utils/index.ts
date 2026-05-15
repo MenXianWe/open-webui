@@ -1,7 +1,7 @@
 import type { Writable } from 'svelte/store';
 import { v4 as uuidv4 } from 'uuid';
 import sha256 from 'js-sha256';
-import { WEBUI_BASE_URL } from '$lib/constants';
+import { WEBUI_BASE_URL, WEBUI_DEFAULT_USER_PROFILE_IMAGE_VALUE } from '$lib/constants';
 
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -407,6 +407,40 @@ export const generateInitialsImage = (name) => {
 	return canvas.toDataURL();
 };
 
+export const resolveUserProfileImage = (
+	profileImageUrl: string | null | undefined,
+	name: string | null | undefined = '',
+	email: string | null | undefined = ''
+) => {
+	const fallback = () => generateInitialsImage(name || email || '');
+	const imageUrl = (profileImageUrl ?? '').trim();
+
+	if (!imageUrl) {
+		return fallback();
+	}
+
+	const defaultProfileImages = new Set([
+		WEBUI_DEFAULT_USER_PROFILE_IMAGE_VALUE,
+		'/static/user.png',
+		`${WEBUI_BASE_URL}${WEBUI_DEFAULT_USER_PROFILE_IMAGE_VALUE}`,
+		`${WEBUI_BASE_URL}/static/user.png`
+	]);
+
+	if (
+		defaultProfileImages.has(imageUrl) ||
+		imageUrl.startsWith('/api/v1/users/') ||
+		imageUrl.startsWith(`${WEBUI_BASE_URL}/api/v1/users/`)
+	) {
+		return fallback();
+	}
+
+	if (imageUrl.startsWith('/api/') || imageUrl.startsWith('/static/')) {
+		return `${WEBUI_BASE_URL}${imageUrl}`;
+	}
+
+	return imageUrl;
+};
+
 export const formatDate = (inputDate) => {
 	const date = dayjs(inputDate);
 
@@ -686,7 +720,7 @@ export const getImportOrigin = (_chats) => {
 	if (_chats.some((chat) => 'mapping' in chat)) {
 		return 'openai';
 	}
-	return 'webui';
+	return 'qlcode-chat';
 };
 
 export const getUserPosition = async (raw = false) => {

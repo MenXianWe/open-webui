@@ -17,7 +17,7 @@
 		settings
 	} from '$lib/stores';
 
-	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import { resolveUserProfileImage } from '$lib/utils';
 
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -55,6 +55,19 @@
 
 	let showUserStatusModal = false;
 	let shiftKey = false;
+
+	const getCurrentUserProfileImageUrl = () =>
+		resolveUserProfileImage($user?.profile_image_url, $user?.name, $user?.email);
+
+	const useDefaultUserImage = (event: Event) => {
+		const image = event.currentTarget as HTMLImageElement;
+		const initialsImageUrl = getCurrentUserProfileImageUrl();
+		if (image.src === initialsImageUrl) {
+			return;
+		}
+
+		image.src = initialsImageUrl;
+	};
 
 	const dispatch = createEventDispatcher();
 
@@ -129,9 +142,10 @@
 				<div class=" flex gap-3.5 w-full p-2.5 items-center">
 					<div class=" items-center flex shrink-0">
 						<img
-							src={`${WEBUI_API_BASE_URL}/users/${$user?.id}/profile/image`}
+							src={getCurrentUserProfileImageUrl()}
 							class=" size-10 object-cover rounded-full"
 							alt="profile"
+							on:error={useDefaultUserImage}
 						/>
 					</div>
 
@@ -559,43 +573,6 @@
 
 			{#if help}
 				<hr class=" border-gray-50/30 dark:border-gray-800/30 my-1 p-0" />
-
-				<!-- {$i18n.t('Help')} -->
-
-				{#if $user?.role === 'admin'}
-					<a
-						href="https://docs.openwebui.com"
-						target="_blank"
-						draggable="false"
-						class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
-						id="chat-share-button"
-						on:click={() => {
-							show = false;
-						}}
-					>
-						<div class=" self-center mr-3">
-							<QuestionMarkCircle className="size-5" />
-						</div>
-						<div class=" self-center truncate">{$i18n.t('Documentation')}</div>
-					</a>
-
-					<!-- Releases -->
-					<a
-						href="https://github.com/open-webui/open-webui/releases"
-						target="_blank"
-						draggable="false"
-						class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
-						id="chat-share-button"
-						on:click={() => {
-							show = false;
-						}}
-					>
-						<div class=" self-center mr-3">
-							<Map className="size-5" />
-						</div>
-						<div class=" self-center truncate">{$i18n.t('Releases')}</div>
-					</a>
-				{/if}
 
 				<button
 					class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"

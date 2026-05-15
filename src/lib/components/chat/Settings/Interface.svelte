@@ -5,7 +5,7 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { updateUserInfo } from '$lib/apis/users';
 	import { getUserPosition } from '$lib/utils';
-	import { setTextScale } from '$lib/utils/text-scale';
+	import { DEFAULT_TEXT_SCALE, setTextScale } from '$lib/utils/text-scale';
 
 	import Minus from '$lib/components/icons/Minus.svelte';
 	import Plus from '$lib/components/icons/Plus.svelte';
@@ -192,7 +192,7 @@
 		textScale = scale;
 		setTextScale(textScale);
 
-		if (textScale === 1) {
+		if (textScale === DEFAULT_TEXT_SCALE) {
 			textScale = null;
 		}
 		saveSettings({ textScale });
@@ -350,10 +350,10 @@
 							type="button"
 							on:click={() => {
 								if (textScale === null) {
-									textScale = 1;
+									textScale = DEFAULT_TEXT_SCALE;
 								} else {
 									textScale = null;
-									setTextScaleHandler(1);
+									setTextScaleHandler(DEFAULT_TEXT_SCALE);
 								}
 							}}
 						>

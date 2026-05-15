@@ -201,9 +201,7 @@
 								{$i18n.t('Feedback Activity')}
 							</div>
 						</Tooltip>
-						<div
-							class="inline-flex rounded-full bg-gray-100/80 p-0.5 dark:bg-gray-800/80 backdrop-blur-sm"
-						>
+						<div class="inline-flex rounded-full bg-gray-100/80 p-0.5 dark:bg-gray-800/80">
 							{#each TIME_RANGES as range}
 								<button
 									type="button"

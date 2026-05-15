@@ -399,7 +399,7 @@ async def get_builtin_tools(
 ) -> dict[str, dict]:
     """
     Get built-in tools for native function calling.
-    Only returns tools when BOTH the global config is enabled AND the model capability allows it.
+    Returns tools that are enabled for the selected model, feature flags, and user permissions.
     """
     tools_dict = {}
     builtin_functions = []
@@ -496,21 +496,13 @@ async def get_builtin_tools(
     ):
         builtin_functions.extend([search_web, fetch_url])
 
-    # Add image generation/edit tools if builtin category enabled AND enabled globally AND model has image_generation capability
-    if (
-        is_builtin_tool_enabled('image_generation')
-        and getattr(request.app.state.config, 'ENABLE_IMAGE_GENERATION', False)
-        and get_model_capability('image_generation')
-        and features.get('image_generation')
-        and await has_user_permission('image_generation')
-    ):
+    # Add image generation/edit tools when the model and user permissions allow it.
+    if is_builtin_tool_enabled('image_generation') and features.get('image_generation'):
         builtin_functions.append(generate_image)
     if (
         is_builtin_tool_enabled('image_generation')
         and getattr(request.app.state.config, 'ENABLE_IMAGE_EDIT', False)
-        and get_model_capability('image_generation')
         and features.get('image_generation')
-        and await has_user_permission('image_generation')
     ):
         builtin_functions.append(edit_image)
 

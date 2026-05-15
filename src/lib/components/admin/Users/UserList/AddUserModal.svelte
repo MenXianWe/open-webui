@@ -8,9 +8,9 @@
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
-	import { generateInitialsImage } from '$lib/utils';
 	import XMark from '$lib/components/icons/XMark.svelte';
 	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
+	import { generateInitialsImage } from '$lib/utils';
 
 	const i18n = getContext('i18n');
 	const dispatch = createEventDispatcher();

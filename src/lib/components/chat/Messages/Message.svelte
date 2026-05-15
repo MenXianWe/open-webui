@@ -13,7 +13,6 @@
 	import UserMessage from './UserMessage.svelte';
 
 	export let chatId;
-	export let selectedModels = [];
 	export let idx = 0;
 
 	export let history;
@@ -30,7 +29,6 @@
 	export let editMessage;
 	export let saveMessage;
 	export let deleteMessage;
-	export let rateMessage;
 	export let actionMessage;
 	export let submitMessage;
 
@@ -38,7 +36,6 @@
 	export let continueResponse;
 	export let mergeResponses;
 
-	export let addMessages;
 	export let triggerScroll;
 	export let readOnly = false;
 	export let editCodeBlock = true;
@@ -78,7 +75,6 @@
 				{chatId}
 				{history}
 				{messageId}
-				{selectedModels}
 				isLastMessage={messageId === history.currentId}
 				siblings={history.messages[history.messages[messageId].parentId]?.childrenIds ?? []}
 				{setInputText}
@@ -88,13 +84,11 @@
 				{updateChat}
 				{editMessage}
 				{saveMessage}
-				{rateMessage}
 				{actionMessage}
 				{submitMessage}
 				{deleteMessage}
 				{continueResponse}
 				{regenerateResponse}
-				{addMessages}
 				{readOnly}
 				{editCodeBlock}
 				{topPadding}
@@ -105,13 +99,11 @@
 					bind:history
 					{chatId}
 					{messageId}
-					{selectedModels}
 					isLastMessage={messageId === history?.currentId}
 					{setInputText}
 					{updateChat}
 					{editMessage}
 					{saveMessage}
-					{rateMessage}
 					{actionMessage}
 					{submitMessage}
 					{deleteMessage}
@@ -119,7 +111,6 @@
 					{regenerateResponse}
 					{mergeResponses}
 					{triggerScroll}
-					{addMessages}
 					{readOnly}
 					{editCodeBlock}
 					{topPadding}

@@ -1,10 +1,7 @@
 <script lang="ts">
-	import DOMPurify from 'dompurify';
-	import { marked } from 'marked';
-
 	import { toast } from 'svelte-sonner';
 
-	import { onMount, getContext, tick } from 'svelte';
+	import { onMount, getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 
@@ -17,34 +14,57 @@
 		updateUserTimezone
 	} from '$lib/apis/auths';
 
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import {
+		QLCODE_API_PORTAL_URL,
+		QLCODE_LOGIN_APP_LOGO_URL,
+		QLCODE_LOGIN_HERO_VISUAL_URL,
+		QLCODE_LOGIN_WORDMARK_URL,
+		WEBUI_BASE_URL
+	} from '$lib/constants';
 	import { WEBUI_NAME, config, user, socket } from '$lib/stores';
 
-	import { generateInitialsImage, canvasPixelTest, getUserTimezone } from '$lib/utils';
+	import { generateInitialsImage, getUserTimezone } from '$lib/utils';
 
 	import Spinner from '$lib/components/common/Spinner.svelte';
-	import OnBoarding from '$lib/components/OnBoarding.svelte';
-	import SensitiveInput from '$lib/components/common/SensitiveInput.svelte';
-	import { redirect } from '@sveltejs/kit';
 
 	const i18n = getContext('i18n');
 
 	let loaded = false;
-
-	let mode = $config?.features.enable_ldap ? 'ldap' : 'signin';
-
+	let mode = 'signin';
 	let form = null;
 
 	let name = '';
 	let email = '';
 	let password = '';
 	let confirmPassword = '';
-
 	let ldapUsername = '';
+	let showPassword = false;
+	let showConfirmPassword = false;
+
+	$: isSignup = mode === 'signup';
+	$: isLdap = mode === 'ldap';
+	$: canUsePasswordForm =
+		$config?.features?.enable_login_form || $config?.features?.enable_ldap || form;
+	$: canSignup = ($config?.features?.enable_signup ?? false) && !($config?.onboarding ?? false);
+	$: authTitle =
+		($config?.onboarding ?? false)
+			? '创建管理员账号'
+			: isSignup
+				? '注册 QLCodeChat'
+				: isLdap
+					? 'LDAP 登录 QLCodeChat'
+					: '登录 QLCodeChat';
+	$: submitText =
+		($config?.onboarding ?? false)
+			? '创建管理员账号'
+			: isSignup
+				? '注册'
+				: isLdap
+					? '认证'
+					: '登录';
 
 	const setSessionUser = async (sessionUser, redirectPath: string | null = null) => {
 		if (sessionUser) {
-			console.log(sessionUser);
 			toast.success($i18n.t(`You're now logged in.`));
 			if (sessionUser.token) {
 				localStorage.token = sessionUser.token;
@@ -53,7 +73,6 @@
 			await user.set(sessionUser);
 			await config.set(await getBackendConfig());
 
-			// Update user timezone
 			const timezone = getUserTimezone();
 			if (sessionUser.token && timezone) {
 				updateUserTimezone(sessionUser.token, timezone);
@@ -78,11 +97,9 @@
 	};
 
 	const signUpHandler = async () => {
-		if ($config?.features?.enable_signup_password_confirmation) {
-			if (password !== confirmPassword) {
-				toast.error($i18n.t('Passwords do not match.'));
-				return;
-			}
+		if ($config?.features?.enable_signup_password_confirmation && password !== confirmPassword) {
+			toast.error($i18n.t('Passwords do not match.'));
+			return;
 		}
 
 		const sessionUser = await userSignUp(name, email, password, generateInitialsImage(name)).catch(
@@ -104,17 +121,16 @@
 	};
 
 	const submitHandler = async () => {
-		if (mode === 'ldap') {
+		if (isLdap) {
 			await ldapSignInHandler();
-		} else if (mode === 'signin') {
-			await signInHandler();
-		} else {
+		} else if (isSignup) {
 			await signUpHandler();
+		} else {
+			await signInHandler();
 		}
 	};
 
 	const oauthCallbackHandler = async () => {
-		// Get the value of the 'token' cookie
 		function getCookie(name) {
 			const match = document.cookie.match(
 				new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)')
@@ -140,39 +156,28 @@
 		await setSessionUser(sessionUser, localStorage.getItem('redirectPath') || null);
 	};
 
-	let onboarding = false;
-
-	async function setLogoImage() {
-		await tick();
-		const logo = document.getElementById('logo');
-
-		if (logo) {
-			const isDarkMode = document.documentElement.classList.contains('dark');
-
-			if (isDarkMode) {
-				const darkImage = new Image();
-				darkImage.src = `${WEBUI_BASE_URL}/static/favicon-dark.png`;
-
-				darkImage.onload = () => {
-					logo.src = `${WEBUI_BASE_URL}/static/favicon-dark.png`;
-					logo.style.filter = ''; // Ensure no inversion is applied if favicon-dark.png exists
-				};
-
-				darkImage.onerror = () => {
-					logo.style.filter = 'invert(1)'; // Invert image if favicon-dark.png is missing
-				};
-			}
+	const initializeMode = () => {
+		if ($config?.onboarding ?? false) {
+			mode = 'signup';
+		} else if (
+			($config?.features?.enable_ldap ?? false) &&
+			!($config?.features?.enable_login_form ?? true)
+		) {
+			mode = 'ldap';
+		} else {
+			mode = 'signin';
 		}
-	}
+	};
 
 	onMount(async () => {
 		const redirectPath = $page.url.searchParams.get('redirect');
 		if ($user !== undefined) {
 			goto(redirectPath || '/');
-		} else {
-			if (redirectPath) {
-				localStorage.setItem('redirectPath', redirectPath);
-			}
+			return;
+		}
+
+		if (redirectPath) {
+			localStorage.setItem('redirectPath', redirectPath);
 		}
 
 		const error = $page.url.searchParams.get('error');
@@ -182,424 +187,777 @@
 
 		await oauthCallbackHandler();
 		form = $page.url.searchParams.get('form');
-
+		initializeMode();
 		loaded = true;
-		setLogoImage();
 
 		if (($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false) {
 			await signInHandler();
-		} else {
-			onboarding = $config?.onboarding ?? false;
 		}
 	});
 </script>
 
 <svelte:head>
-	<title>
-		{`${$WEBUI_NAME}`}
-	</title>
+	<title>{`${$WEBUI_NAME}`}</title>
 </svelte:head>
 
-<OnBoarding
-	bind:show={onboarding}
-	getStartedHandler={() => {
-		onboarding = false;
-		mode = $config?.features.enable_ldap ? 'ldap' : 'signup';
-	}}
-/>
-
-<div class="w-full h-screen max-h-[100dvh] text-white relative" id="auth-page">
-	<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
-
-	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region" />
-
+<div class="ql-auth-page" id="auth-page">
 	{#if loaded}
-		<div
-			class="fixed bg-transparent min-h-screen w-full flex justify-center font-primary z-50 text-black dark:text-white"
-			id="auth-container"
-		>
-			<div class="w-full px-10 min-h-screen flex flex-col text-center">
-				{#if ($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false}
-					<div class=" my-auto pb-10 w-full sm:max-w-md">
-						<div
-							class="flex items-center justify-center gap-3 text-xl sm:text-2xl text-center font-medium dark:text-gray-200"
-						>
-							<div>
-								{$i18n.t('Signing in to {{WEBUI_NAME}}', { WEBUI_NAME: $WEBUI_NAME })}
-							</div>
+		{#if ($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false}
+			<div class="ql-auth-loading">
+				<div class="ql-loading-title">
+					{$i18n.t('Signing in to {{WEBUI_NAME}}', { WEBUI_NAME: $WEBUI_NAME })}
+				</div>
+				<Spinner className="size-5" />
+			</div>
+		{:else}
+			<main class="ql-auth-shell">
+				<header class="ql-auth-brand">
+					<img src={QLCODE_LOGIN_WORDMARK_URL} alt="QLCodeChat" draggable="false" />
+					<a
+						class="ql-auth-key-link"
+						href={QLCODE_API_PORTAL_URL}
+						target="_blank"
+						rel="noreferrer"
+						aria-label="获取 QLCodeAPI 密钥"
+					>
+						获取密钥
+					</a>
+				</header>
 
-							<div>
-								<Spinner className="size-5" />
-							</div>
-						</div>
-					</div>
-				{:else}
-					<div class="my-auto flex flex-col justify-center items-center">
-						<div class=" sm:max-w-md my-auto pb-10 w-full dark:text-gray-100">
-							{#if $config?.metadata?.auth_logo_position === 'center'}
-								<div class="flex justify-center mb-6">
-									<img
-										id="logo"
-										crossorigin="anonymous"
-										src="{WEBUI_BASE_URL}/static/favicon.png"
-										class="size-24 rounded-full"
-										alt="{$WEBUI_NAME} logo"
-									/>
-								</div>
-							{/if}
+				<section class="ql-auth-content" aria-label="QLCodeChat authentication">
+					<div class="ql-auth-card {isSignup ? 'ql-auth-card--compact' : ''}">
+						<img class="ql-card-logo" src={QLCODE_LOGIN_APP_LOGO_URL} alt="" draggable="false" />
+
+						<h1>{authTitle}</h1>
+
+						{#if canUsePasswordForm}
 							<form
-								class=" flex flex-col justify-center"
-								on:submit={(e) => {
-									e.preventDefault();
+								class="ql-auth-form"
+								on:submit={(event) => {
+									event.preventDefault();
 									submitHandler();
 								}}
 							>
-								<div class="mb-1">
-									<div class=" text-2xl font-medium">
-										{#if $config?.onboarding ?? false}
-											{$i18n.t(`Get started with {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else if mode === 'ldap'}
-											{$i18n.t(`Sign in to {{WEBUI_NAME}} with LDAP`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else if mode === 'signin'}
-											{$i18n.t(`Sign in to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{:else}
-											{$i18n.t(`Sign up to {{WEBUI_NAME}}`, { WEBUI_NAME: $WEBUI_NAME })}
-										{/if}
-									</div>
-
-									{#if $config?.onboarding ?? false}
-										<div class="mt-1 text-xs font-medium text-gray-600 dark:text-gray-500">
-											ⓘ {$WEBUI_NAME}
-											{$i18n.t(
-												'does not make any external connections, and your data stays securely on your locally hosted server.'
-											)}
-										</div>
-									{/if}
-								</div>
-
-								{#if $config?.features.enable_login_form || $config?.features.enable_ldap || form}
-									<div class="flex flex-col mt-4">
-										{#if mode === 'signup'}
-											<div class="mb-2">
-												<label for="name" class="text-sm font-medium text-left mb-1 block"
-													>{$i18n.t('Name')}</label
-												>
-												<input
-													bind:value={name}
-													type="text"
-													id="name"
-													class="my-0.5 w-full text-sm outline-hidden bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-600"
-													autocomplete="name"
-													placeholder={$i18n.t('Enter Your Full Name')}
-													required
-												/>
-											</div>
-										{/if}
-
-										{#if mode === 'ldap'}
-											<div class="mb-2">
-												<label for="username" class="text-sm font-medium text-left mb-1 block"
-													>{$i18n.t('Username')}</label
-												>
-												<input
-													bind:value={ldapUsername}
-													type="text"
-													class="my-0.5 w-full text-sm outline-hidden bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-600"
-													autocomplete="username"
-													name="username"
-													id="username"
-													placeholder={$i18n.t('Enter Your Username')}
-													required
-												/>
-											</div>
-										{:else}
-											<div class="mb-2">
-												<label for="email" class="text-sm font-medium text-left mb-1 block"
-													>{$i18n.t('Email')}</label
-												>
-												<input
-													bind:value={email}
-													type="email"
-													id="email"
-													class="my-0.5 w-full text-sm outline-hidden bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-600"
-													autocomplete="email"
-													name="email"
-													placeholder={$i18n.t('Enter Your Email')}
-													required
-												/>
-											</div>
-										{/if}
-
-										<div>
-											<label for="password" class="text-sm font-medium text-left mb-1 block"
-												>{$i18n.t('Password')}</label
-											>
-											<SensitiveInput
-												bind:value={password}
-												type="password"
-												id="password"
-												class="my-0.5 w-full text-sm outline-hidden bg-transparent placeholder:text-gray-300 dark:placeholder:text-gray-600"
-												placeholder={$i18n.t('Enter Your Password')}
-												autocomplete={mode === 'signup' ? 'new-password' : 'current-password'}
-												name="password"
-												screenReader={true}
+								{#if isSignup}
+									<label class="ql-field">
+										<span>姓名</span>
+										<div class="ql-input-wrap">
+											<span class="ql-field-icon" aria-hidden="true">
+												<svg viewBox="0 0 24 24" fill="none">
+													<path
+														d="M20 21a8 8 0 0 0-16 0"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+													/>
+													<path
+														d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"
+														stroke="currentColor"
+														stroke-width="2"
+													/>
+												</svg>
+											</span>
+											<input
+												bind:value={name}
+												type="text"
+												autocomplete="name"
+												placeholder="输入您的姓名"
 												required
-												aria-required="true"
 											/>
 										</div>
-
-										{#if mode === 'signup' && $config?.features?.enable_signup_password_confirmation}
-											<div class="mt-2">
-												<label
-													for="confirm-password"
-													class="text-sm font-medium text-left mb-1 block"
-													>{$i18n.t('Confirm Password')}</label
-												>
-												<SensitiveInput
-													bind:value={confirmPassword}
-													type="password"
-													id="confirm-password"
-													class="my-0.5 w-full text-sm outline-hidden bg-transparent"
-													placeholder={$i18n.t('Confirm Your Password')}
-													autocomplete="new-password"
-													name="confirm-password"
-													required
-												/>
-											</div>
-										{/if}
-									</div>
+									</label>
 								{/if}
-								<div class="mt-5">
-									{#if $config?.features.enable_login_form || $config?.features.enable_ldap || form}
-										{#if mode === 'ldap'}
-											<button
-												class="bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-												type="submit"
-											>
-												{$i18n.t('Authenticate')}
-											</button>
-										{:else}
-											<button
-												class="bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-												type="submit"
-											>
-												{mode === 'signin'
-													? $i18n.t('Sign in')
-													: ($config?.onboarding ?? false)
-														? $i18n.t('Create Admin Account')
-														: $i18n.t('Create Account')}
-											</button>
 
-											{#if $config?.features.enable_signup && !($config?.onboarding ?? false)}
-												<div class=" mt-4 text-sm text-center">
-													{mode === 'signin'
-														? $i18n.t("Don't have an account?")
-														: $i18n.t('Already have an account?')}
+								{#if isLdap}
+									<label class="ql-field">
+										<span>用户名</span>
+										<div class="ql-input-wrap">
+											<span class="ql-field-icon" aria-hidden="true">
+												<svg viewBox="0 0 24 24" fill="none">
+													<path
+														d="M20 21a8 8 0 0 0-16 0"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+													/>
+													<path
+														d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z"
+														stroke="currentColor"
+														stroke-width="2"
+													/>
+												</svg>
+											</span>
+											<input
+												bind:value={ldapUsername}
+												type="text"
+												autocomplete="username"
+												placeholder="输入您的用户名"
+												required
+											/>
+										</div>
+									</label>
+								{:else}
+									<label class="ql-field">
+										<span>电子邮箱</span>
+										<div class="ql-input-wrap">
+											<span class="ql-field-icon" aria-hidden="true">
+												<svg viewBox="0 0 24 24" fill="none">
+													<path
+														d="M4 6h16v12H4V6Z"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linejoin="round"
+													/>
+													<path
+														d="m5 7 7 6 7-6"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+													/>
+												</svg>
+											</span>
+											<input
+												bind:value={email}
+												type="email"
+												autocomplete="email"
+												placeholder="输入您的电子邮箱"
+												required
+											/>
+										</div>
+									</label>
+								{/if}
 
-													<button
-														class=" font-medium underline"
-														type="button"
-														on:click={() => {
-															if (mode === 'signin') {
-																mode = 'signup';
-															} else {
-																mode = 'signin';
-															}
-														}}
-													>
-														{mode === 'signin' ? $i18n.t('Sign up') : $i18n.t('Sign in')}
-													</button>
-												</div>
-											{/if}
-										{/if}
-									{/if}
-								</div>
-							</form>
-
-							{#if Object.keys($config?.oauth?.providers ?? {}).length > 0}
-								<div class="inline-flex items-center justify-center w-full">
-									<hr class="w-32 h-px my-4 border-0 dark:bg-gray-100/10 bg-gray-700/10" />
-									{#if $config?.features.enable_login_form || $config?.features.enable_ldap || form}
-										<span
-											class="px-3 text-sm font-medium text-gray-900 dark:text-white bg-transparent"
-											>{$i18n.t('or')}</span
-										>
-									{/if}
-
-									<hr class="w-32 h-px my-4 border-0 dark:bg-gray-100/10 bg-gray-700/10" />
-								</div>
-								<div class="flex flex-col space-y-2">
-									{#if $config?.oauth?.providers?.google}
-										<button
-											class="flex justify-center items-center bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-											on:click={() => {
-												window.location.href = `${WEBUI_BASE_URL}/oauth/google/login`;
-											}}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												viewBox="0 0 48 48"
-												class="size-6 mr-3"
-												aria-hidden="true"
-											>
+								<label class="ql-field">
+									<span>密码</span>
+									<div class="ql-input-wrap">
+										<span class="ql-field-icon" aria-hidden="true">
+											<svg viewBox="0 0 24 24" fill="none">
 												<path
-													fill="#EA4335"
-													d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-												/><path
-													fill="#4285F4"
-													d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-												/><path
-													fill="#FBBC05"
-													d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-												/><path
-													fill="#34A853"
-													d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-												/><path fill="none" d="M0 0h48v48H0z" />
-											</svg>
-											<span>{$i18n.t('Continue with {{provider}}', { provider: 'Google' })}</span>
-										</button>
-									{/if}
-									{#if $config?.oauth?.providers?.microsoft}
-										<button
-											class="flex justify-center items-center bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-											on:click={() => {
-												window.location.href = `${WEBUI_BASE_URL}/oauth/microsoft/login`;
-											}}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												viewBox="0 0 21 21"
-												class="size-6 mr-3"
-												aria-hidden="true"
-											>
-												<rect x="1" y="1" width="9" height="9" fill="#f25022" /><rect
-													x="1"
-													y="11"
-													width="9"
-													height="9"
-													fill="#00a4ef"
-												/><rect x="11" y="1" width="9" height="9" fill="#7fba00" /><rect
-													x="11"
-													y="11"
-													width="9"
-													height="9"
-													fill="#ffb900"
-												/>
-											</svg>
-											<span>{$i18n.t('Continue with {{provider}}', { provider: 'Microsoft' })}</span
-											>
-										</button>
-									{/if}
-									{#if $config?.oauth?.providers?.github}
-										<button
-											class="flex justify-center items-center bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-											on:click={() => {
-												window.location.href = `${WEBUI_BASE_URL}/oauth/github/login`;
-											}}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												viewBox="0 0 24 24"
-												class="size-6 mr-3"
-												aria-hidden="true"
-											>
-												<path
-													fill="currentColor"
-													d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.92 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57C20.565 21.795 24 17.31 24 12c0-6.63-5.37-12-12-12z"
-												/>
-											</svg>
-											<span>{$i18n.t('Continue with {{provider}}', { provider: 'GitHub' })}</span>
-										</button>
-									{/if}
-									{#if $config?.oauth?.providers?.oidc}
-										<button
-											class="flex justify-center items-center bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
-											on:click={() => {
-												window.location.href = `${WEBUI_BASE_URL}/oauth/oidc/login`;
-											}}
-										>
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke-width="1.5"
-												stroke="currentColor"
-												class="size-6 mr-3"
-												aria-hidden="true"
-											>
-												<path
+													d="M7 10V8a5 5 0 0 1 10 0v2"
+													stroke="currentColor"
+													stroke-width="2"
 													stroke-linecap="round"
+												/>
+												<path
+													d="M6 10h12v10H6V10Z"
+													stroke="currentColor"
+													stroke-width="2"
 													stroke-linejoin="round"
-													d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z"
 												/>
 											</svg>
-
-											<span
-												>{$i18n.t('Continue with {{provider}}', {
-													provider: $config?.oauth?.providers?.oidc ?? 'SSO'
-												})}</span
-											>
-										</button>
-									{/if}
-									{#if $config?.oauth?.providers?.feishu}
+										</span>
+										<input
+											bind:value={password}
+											type={showPassword ? 'text' : 'password'}
+											autocomplete={isSignup ? 'new-password' : 'current-password'}
+											placeholder="输入您的密码"
+											required
+										/>
 										<button
-											class="flex justify-center items-center bg-gray-700/5 hover:bg-gray-700/10 dark:bg-gray-100/5 dark:hover:bg-gray-100/10 dark:text-gray-300 dark:hover:text-white transition w-full rounded-full font-medium text-sm py-2.5"
+											type="button"
+											class="ql-password-toggle"
+											aria-label="切换密码显示"
 											on:click={() => {
-												window.location.href = `${WEBUI_BASE_URL}/oauth/feishu/login`;
+												showPassword = !showPassword;
 											}}
 										>
-											<span>{$i18n.t('Continue with {{provider}}', { provider: 'Feishu' })}</span>
+											<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+												<path
+													d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"
+													stroke="currentColor"
+													stroke-width="2"
+													stroke-linejoin="round"
+												/>
+												<path
+													d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+													stroke="currentColor"
+													stroke-width="2"
+												/>
+											</svg>
 										</button>
-									{/if}
-								</div>
-							{/if}
+									</div>
+								</label>
 
-							{#if $config?.features.enable_ldap && $config?.features.enable_login_form}
-								<div class="mt-2">
+								{#if isSignup && $config?.features?.enable_signup_password_confirmation}
+									<label class="ql-field">
+										<span>确认密码</span>
+										<div class="ql-input-wrap">
+											<span class="ql-field-icon" aria-hidden="true">
+												<svg viewBox="0 0 24 24" fill="none">
+													<path
+														d="M7 10V8a5 5 0 0 1 10 0v2"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+													/>
+													<path
+														d="M6 10h12v10H6V10Z"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linejoin="round"
+													/>
+												</svg>
+											</span>
+											<input
+												bind:value={confirmPassword}
+												type={showConfirmPassword ? 'text' : 'password'}
+												autocomplete="new-password"
+												placeholder="再次输入您的密码"
+												required
+											/>
+											<button
+												type="button"
+												class="ql-password-toggle"
+												aria-label="切换确认密码显示"
+												on:click={() => {
+													showConfirmPassword = !showConfirmPassword;
+												}}
+											>
+												<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+													<path
+														d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linejoin="round"
+													/>
+													<path
+														d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"
+														stroke="currentColor"
+														stroke-width="2"
+													/>
+												</svg>
+											</button>
+										</div>
+									</label>
+								{/if}
+
+								<button class="ql-submit" type="submit">{submitText}</button>
+							</form>
+						{/if}
+
+						{#if canSignup || (isSignup && !($config?.onboarding ?? false))}
+							<div class="ql-mode-switch">
+								<span>{isSignup ? '已有账号？' : '没有账号？'}</span>
+								<button
+									type="button"
+									on:click={() => {
+										mode = isSignup ? 'signin' : 'signup';
+									}}
+								>
+									{isSignup ? '去登录' : '立即注册'}
+								</button>
+							</div>
+						{/if}
+
+						{#if $config?.features.enable_ldap && $config?.features.enable_login_form}
+							<div class="ql-mode-switch">
+								<button
+									type="button"
+									on:click={() => {
+										mode = isLdap ? 'signin' : 'ldap';
+									}}
+								>
+									{isLdap ? '使用邮箱登录' : '使用 LDAP 登录'}
+								</button>
+							</div>
+						{/if}
+
+						{#if Object.keys($config?.oauth?.providers ?? {}).length > 0}
+							<div class="ql-oauth">
+								<div class="ql-oauth-divider"><span>或</span></div>
+
+								{#if $config?.oauth?.providers?.google}
 									<button
-										class="flex justify-center items-center text-xs w-full text-center underline"
 										type="button"
 										on:click={() => {
-											if (mode === 'ldap')
-												mode = ($config?.onboarding ?? false) ? 'signup' : 'signin';
-											else mode = 'ldap';
+											window.location.href = `${WEBUI_BASE_URL}/oauth/google/login`;
 										}}
 									>
-										<span
-											>{mode === 'ldap'
-												? $i18n.t('Continue with Email')
-												: $i18n.t('Continue with LDAP')}</span
-										>
+										使用 Google 登录
 									</button>
-								</div>
-							{/if}
-						</div>
-						{#if $config?.metadata?.login_footer}
-							<div class="max-w-3xl mx-auto">
-								<div class="mt-2 text-[0.7rem] text-gray-500 dark:text-gray-400 marked">
-									{@html DOMPurify.sanitize(marked($config?.metadata?.login_footer))}
-								</div>
+								{/if}
+								{#if $config?.oauth?.providers?.microsoft}
+									<button
+										type="button"
+										on:click={() => {
+											window.location.href = `${WEBUI_BASE_URL}/oauth/microsoft/login`;
+										}}
+									>
+										使用 Microsoft 登录
+									</button>
+								{/if}
+								{#if $config?.oauth?.providers?.github}
+									<button
+										type="button"
+										on:click={() => {
+											window.location.href = `${WEBUI_BASE_URL}/oauth/github/login`;
+										}}
+									>
+										使用 GitHub 登录
+									</button>
+								{/if}
+								{#if $config?.oauth?.providers?.oidc}
+									<button
+										type="button"
+										on:click={() => {
+											window.location.href = `${WEBUI_BASE_URL}/oauth/oidc/login`;
+										}}
+									>
+										使用 {$config?.oauth?.providers?.oidc ?? 'SSO'} 登录
+									</button>
+								{/if}
+								{#if $config?.oauth?.providers?.feishu}
+									<button
+										type="button"
+										on:click={() => {
+											window.location.href = `${WEBUI_BASE_URL}/oauth/feishu/login`;
+										}}
+									>
+										使用 Feishu 登录
+									</button>
+								{/if}
 							</div>
 						{/if}
 					</div>
-				{/if}
-			</div>
-		</div>
 
-		{#if !$config?.metadata?.auth_logo_position}
-			<div class="fixed m-10 z-50">
-				<div class="flex space-x-2">
-					<div class=" self-center">
-						<img
-							id="logo"
-							crossorigin="anonymous"
-							src="{WEBUI_BASE_URL}/static/favicon.png"
-							class=" w-6 rounded-full"
-							alt=""
-						/>
+					<div class="ql-auth-hero" aria-hidden="true">
+						<img src={QLCODE_LOGIN_HERO_VISUAL_URL} alt="" draggable="false" />
 					</div>
-				</div>
-			</div>
+				</section>
+			</main>
 		{/if}
 	{/if}
 </div>
+
+<style>
+	:global(body) {
+		background: #f8fbff;
+	}
+
+	.ql-auth-page {
+		position: relative;
+		min-height: 100dvh;
+		overflow-x: hidden;
+		overflow-y: auto;
+		color: #061155;
+		background:
+			radial-gradient(circle at 84% 34%, rgba(16, 196, 211, 0.14), transparent 28rem),
+			radial-gradient(circle at 22% 78%, rgba(5, 83, 255, 0.12), transparent 34rem),
+			linear-gradient(135deg, #fbfdff 0%, #f5f9ff 52%, #eef6ff 100%);
+		font-family: var(--font-primary);
+	}
+
+	.ql-auth-page,
+	.ql-auth-page * {
+		box-sizing: border-box;
+	}
+
+	.ql-auth-page::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+		background-image:
+			linear-gradient(rgba(10, 64, 190, 0.04) 1px, transparent 1px),
+			linear-gradient(90deg, rgba(10, 64, 190, 0.04) 1px, transparent 1px);
+		background-size: 48px 48px;
+		mask-image: radial-gradient(circle at 73% 50%, black, transparent 45rem);
+	}
+
+	.ql-auth-shell {
+		position: relative;
+		z-index: 1;
+		min-height: 100dvh;
+		padding: clamp(20px, 2.6vw, 44px);
+		display: flex;
+		flex-direction: column;
+	}
+
+	.ql-auth-brand {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		min-height: 72px;
+	}
+
+	.ql-auth-brand img {
+		width: clamp(220px, 18vw, 360px);
+		height: auto;
+		object-fit: contain;
+	}
+
+	.ql-auth-key-link {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 42px;
+		padding: 0 18px;
+		border: 1px solid rgba(6, 17, 85, 0.22);
+		border-radius: 999px;
+		background: #ffffff;
+		color: #061155;
+		font-size: 1rem;
+		font-weight: 800;
+		line-height: 1;
+		text-decoration: none;
+		box-shadow: 0 0.7rem 1.6rem rgba(21, 65, 151, 0.1);
+		transition:
+			border-color 160ms ease,
+			background-color 160ms ease,
+			color 160ms ease,
+			box-shadow 160ms ease,
+			transform 160ms ease;
+	}
+
+	.ql-auth-key-link:hover,
+	.ql-auth-key-link:focus-visible {
+		border-color: #075cf8;
+		background: #075cf8;
+		color: #ffffff;
+		box-shadow: 0 0.8rem 1.8rem rgba(7, 92, 248, 0.18);
+		transform: translateY(-1px);
+	}
+
+	.ql-auth-content {
+		flex: 1;
+		display: grid;
+		grid-template-columns: minmax(440px, 480px) minmax(420px, 1fr);
+		align-items: center;
+		gap: clamp(36px, 3vw, 56px);
+		max-width: 1180px;
+		width: 100%;
+		margin: 0 auto;
+	}
+
+	.ql-auth-card {
+		width: 100%;
+		padding: clamp(36px, 2.6vw, 48px) clamp(34px, 2.7vw, 50px);
+		border: 1px solid rgba(21, 199, 211, 0.45);
+		border-radius: 24px;
+		background: rgba(255, 255, 255, 0.72);
+		box-shadow:
+			0 2rem 5rem rgba(21, 65, 151, 0.12),
+			inset 0 1px 0 rgba(255, 255, 255, 0.8);
+	}
+
+	.ql-card-logo {
+		display: block;
+		width: 86px;
+		height: 86px;
+		object-fit: contain;
+		margin: 0 auto 18px;
+	}
+
+	.ql-auth-card h1 {
+		margin: 0 0 30px;
+		text-align: center;
+		font-size: clamp(1.75rem, 2.2vw, 2.35rem);
+		font-weight: 800;
+		color: #050e57;
+		letter-spacing: 0;
+	}
+
+	.ql-auth-card--compact {
+		padding: clamp(22px, 1.8vw, 32px) clamp(34px, 2.7vw, 50px);
+	}
+
+	.ql-auth-card--compact .ql-card-logo {
+		width: 56px;
+		height: 56px;
+		margin-bottom: 10px;
+	}
+
+	.ql-auth-card--compact h1 {
+		margin-bottom: 14px;
+		font-size: clamp(1.65rem, 2vw, 2.15rem);
+	}
+
+	.ql-auth-card--compact .ql-auth-form {
+		gap: 10px;
+	}
+
+	.ql-auth-card--compact .ql-field {
+		gap: 6px;
+	}
+
+	.ql-auth-card--compact .ql-input-wrap {
+		height: 46px;
+	}
+
+	.ql-auth-card--compact .ql-submit {
+		margin-top: 8px;
+		height: 48px;
+	}
+
+	.ql-auth-card--compact .ql-mode-switch {
+		margin-top: 12px;
+	}
+
+	.ql-auth-form {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	.ql-field {
+		display: grid;
+		gap: 8px;
+		min-width: 0;
+		font-size: 1rem;
+		font-weight: 700;
+		color: #07135b;
+	}
+
+	.ql-input-wrap {
+		position: relative;
+		display: flex;
+		align-items: center;
+		width: 100%;
+		min-width: 0;
+		height: 58px;
+		border: 1px solid rgba(109, 132, 171, 0.32);
+		border-radius: 18px;
+		background: rgba(255, 255, 255, 0.86);
+		box-shadow: inset 0 1px 2px rgba(14, 39, 95, 0.04);
+		transition:
+			border-color 160ms ease,
+			box-shadow 160ms ease;
+	}
+
+	.ql-input-wrap:focus-within {
+		border-color: rgba(13, 197, 211, 0.72);
+		box-shadow:
+			0 0 0 4px rgba(13, 197, 211, 0.13),
+			inset 0 1px 2px rgba(14, 39, 95, 0.04);
+	}
+
+	.ql-field-icon {
+		display: inline-flex;
+		width: 24px;
+		height: 24px;
+		margin-left: 20px;
+		color: #72809d;
+		flex: 0 0 auto;
+	}
+
+	.ql-field-icon svg,
+	.ql-password-toggle svg {
+		width: 100%;
+		height: 100%;
+	}
+
+	.ql-input-wrap input {
+		min-width: 0;
+		flex: 1;
+		height: 100%;
+		border: 0;
+		outline: 0;
+		background: transparent;
+		padding: 0 16px;
+		font-size: 1rem;
+		font-weight: 600;
+		color: #061155;
+	}
+
+	.ql-input-wrap input::placeholder {
+		color: #8e98ae;
+		font-weight: 600;
+	}
+
+	.ql-password-toggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 52px;
+		height: 100%;
+		color: #72809d;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+	}
+
+	.ql-password-toggle svg {
+		width: 22px;
+		height: 22px;
+	}
+
+	.ql-submit {
+		margin-top: 12px;
+		width: 100%;
+		height: 62px;
+		border: 0;
+		border-radius: 22px;
+		background: linear-gradient(100deg, #0758ff 0%, #008dff 47%, #11c9ca 100%);
+		color: #fff;
+		font-size: 1.28rem;
+		font-weight: 800;
+		box-shadow: 0 1.25rem 2.35rem rgba(4, 91, 229, 0.24);
+		cursor: pointer;
+		transition:
+			transform 160ms ease,
+			box-shadow 160ms ease;
+	}
+
+	.ql-submit:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 1.4rem 2.6rem rgba(4, 91, 229, 0.3);
+	}
+
+	.ql-mode-switch {
+		margin-top: 16px;
+		display: flex;
+		justify-content: center;
+		gap: 0.45rem;
+		font-size: 0.95rem;
+		color: #61708d;
+	}
+
+	.ql-mode-switch button,
+	.ql-oauth button {
+		border: 0;
+		background: transparent;
+		color: #0758ff;
+		font-weight: 800;
+		cursor: pointer;
+	}
+
+	.ql-oauth {
+		margin-top: 1rem;
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.ql-oauth-divider {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		color: #73809b;
+		font-size: 0.88rem;
+	}
+
+	.ql-oauth-divider::before,
+	.ql-oauth-divider::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: rgba(109, 132, 171, 0.2);
+	}
+
+	.ql-oauth button {
+		height: 2.75rem;
+		border: 1px solid rgba(109, 132, 171, 0.24);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.7);
+		color: #061155;
+	}
+
+	.ql-auth-hero {
+		position: relative;
+		display: flex;
+		align-items: center;
+		justify-content: flex-start;
+		min-height: 520px;
+	}
+
+	.ql-auth-hero::before {
+		content: '';
+		position: absolute;
+		width: min(48rem, 86%);
+		aspect-ratio: 1;
+		border-radius: 999px;
+		background: radial-gradient(circle, rgba(5, 116, 255, 0.16), transparent 68%);
+	}
+
+	.ql-auth-hero img {
+		position: relative;
+		width: clamp(680px, 48vw, 860px);
+		max-width: none;
+		max-height: min(84vh, calc(100dvh - 148px));
+		object-fit: contain;
+		filter: drop-shadow(0 1.6rem 2.6rem rgba(35, 83, 151, 0.12));
+	}
+
+	.ql-auth-loading {
+		min-height: 100dvh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		color: #061155;
+	}
+
+	.ql-loading-title {
+		font-size: 1.35rem;
+		font-weight: 800;
+	}
+
+	@media (max-width: 1100px) {
+		.ql-auth-content {
+			grid-template-columns: minmax(0, 480px);
+			justify-content: center;
+		}
+
+		.ql-auth-hero {
+			display: none;
+		}
+	}
+
+	@media (max-width: 640px) {
+		.ql-auth-shell {
+			padding: 20px;
+		}
+
+		.ql-auth-content {
+			display: block;
+			width: calc(100vw - 40px);
+			max-width: calc(100vw - 40px);
+			min-width: 0;
+		}
+
+		.ql-auth-brand {
+			min-height: 64px;
+		}
+
+		.ql-auth-brand img {
+			width: min(52vw, 220px);
+		}
+
+		.ql-auth-key-link {
+			min-height: 38px;
+			padding: 0 14px;
+			font-size: 0.92rem;
+		}
+
+		.ql-auth-card {
+			width: 100%;
+			max-width: 100%;
+			min-width: 0;
+			min-height: auto;
+			padding: 28px 20px;
+			border-radius: 20px;
+		}
+
+		.ql-card-logo {
+			width: 76px;
+			height: 76px;
+		}
+
+		.ql-auth-card h1 {
+			font-size: 1.35rem;
+			overflow-wrap: anywhere;
+		}
+
+		.ql-input-wrap {
+			height: 58px;
+		}
+
+		.ql-submit {
+			height: 60px;
+			border-radius: 20px;
+			font-size: 1.1rem;
+		}
+	}
+</style>

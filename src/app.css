@@ -41,22 +41,47 @@ html {
 	font-size: calc(1rem * var(--app-text-scale, 1));
 }
 
+#sidebar {
+	--sidebar-text-scale: 1.1;
+	font-size: calc(0.875rem * var(--sidebar-text-scale, 1));
+}
+
+#sidebar .text-xs {
+	font-size: calc(0.75rem * var(--sidebar-text-scale, 1));
+	line-height: calc(1rem * var(--sidebar-text-scale, 1));
+}
+
+#sidebar .text-sm {
+	font-size: calc(0.875rem * var(--sidebar-text-scale, 1));
+	line-height: calc(1.25rem * var(--sidebar-text-scale, 1));
+}
+
+#sidebar .text-base {
+	font-size: calc(1rem * var(--sidebar-text-scale, 1));
+	line-height: calc(1.5rem * var(--sidebar-text-scale, 1));
+}
+
+#sidebar [class*='text-[10px]'] {
+	font-size: calc(10px * var(--sidebar-text-scale, 1));
+	line-height: calc(14px * var(--sidebar-text-scale, 1));
+}
+
 #sidebar-chat-item {
 	/* sidebar item sizing scales for the chat list entries */
-	min-height: calc(32px * var(--app-text-scale, 1));
-	padding-inline: calc(11px * var(--app-text-scale, 1));
-	padding-block: calc(6px * var(--app-text-scale, 1));
+	min-height: calc(32px * var(--sidebar-text-scale, var(--app-text-scale, 1)));
+	padding-inline: calc(11px * var(--sidebar-text-scale, var(--app-text-scale, 1)));
+	padding-block: calc(6px * var(--sidebar-text-scale, var(--app-text-scale, 1)));
 }
 
 #sidebar-chat-item div[dir='auto'] {
 	/* chat title line height follows the text scale */
-	height: calc(20px * var(--app-text-scale, 1));
-	line-height: calc(20px * var(--app-text-scale, 1));
+	height: calc(20px * var(--sidebar-text-scale, var(--app-text-scale, 1)));
+	line-height: calc(20px * var(--sidebar-text-scale, var(--app-text-scale, 1)));
 }
 
 #sidebar-chat-item input {
 	/* editing state input height is kept in sync */
-	min-height: calc(20px * var(--app-text-scale, 1));
+	min-height: calc(20px * var(--sidebar-text-scale, var(--app-text-scale, 1)));
 }
 
 code {

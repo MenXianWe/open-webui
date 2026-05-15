@@ -407,7 +407,6 @@
 		top: 0;
 		z-index: 5;
 		background: rgba(255, 255, 255, 0.95);
-		backdrop-filter: blur(4px);
 	}
 	:global(.dark) .nb-toolbar {
 		background: rgba(17, 24, 39, 0.95);

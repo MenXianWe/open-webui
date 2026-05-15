@@ -20,6 +20,8 @@ _SAFE_STATIC_PATHS = frozenset(
         '/user.png',
         '/favicon.png',
         '/static/favicon.png',
+        '/static/logo.png',
+        '/static/qlcode-login/app-logo.webp',
     }
 )
 

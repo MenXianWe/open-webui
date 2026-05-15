@@ -1,32 +1,31 @@
-services:
-  ollama:
-    volumes:
-      - ollama:/root/.ollama
-    container_name: ollama
-    pull_policy: always
-    tty: true
-    restart: unless-stopped
-    image: ollama/ollama:${OLLAMA_DOCKER_TAG-latest}
+name: qlcode-chat
 
-  open-webui:
+services:
+  qlcode-chat:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/open-webui/open-webui:${WEBUI_DOCKER_TAG-main}
-    container_name: open-webui
+      network: host
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        ALL_PROXY: ${ALL_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1}
+        http_proxy: ${HTTP_PROXY:-}
+        https_proxy: ${HTTPS_PROXY:-}
+        all_proxy: ${ALL_PROXY:-}
+        no_proxy: ${NO_PROXY:-localhost,127.0.0.1}
+    image: qlcode-chat:${QLCODE_CHAT_DOCKER_TAG-latest}
+    container_name: qlcode-chat
     volumes:
-      - open-webui:/app/backend/data
-    depends_on:
-      - ollama
+      - qlcode-chat:/app/backend/data
     ports:
-      - ${OPEN_WEBUI_PORT-3000}:8080
+      - ${QLCODE_CHAT_PORT-3000}:8080
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
-      - 'WEBUI_SECRET_KEY='
+      - WEBUI_SECRET_KEY=${QLCODE_CHAT_SECRET_KEY:-}
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
 
 volumes:
-  ollama: {}
-  open-webui: {}
+  qlcode-chat: {}

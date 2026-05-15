@@ -1,8 +1,8 @@
-"""OpenTelemetry metrics bootstrap for Open WebUI.
+"""OpenTelemetry metrics bootstrap for QLCodeChat.
 
 This module initialises a MeterProvider that sends metrics to an OTLP
 collector. The collector is responsible for exposing a Prometheus
-`/metrics` endpoint – WebUI does **not** expose it directly.
+`/metrics` endpoint; QLCodeChat does not expose it directly.
 
 Metrics collected:
 
@@ -132,13 +132,13 @@ def _build_meter_provider(resource: Resource) -> MeterProvider:
             attribute_keys=['http.method', 'http.route', 'http.status_code'],
         ),
         View(
-            instrument_name='webui.users.total',
+            instrument_name='qlcode_chat.users.total',
         ),
         View(
-            instrument_name='webui.users.active',
+            instrument_name='qlcode_chat.users.active',
         ),
         View(
-            instrument_name='webui.users.active.today',
+            instrument_name='qlcode_chat.users.active.today',
         ),
     ]
 
@@ -204,21 +204,21 @@ def setup_metrics(app: FastAPI, resource: Resource, db_engine: Engine) -> None:
             logger.debug('Failed to observe users active today', exc_info=True)
 
     meter.create_observable_gauge(
-        name='webui.users.total',
+        name='qlcode_chat.users.total',
         description='Total number of registered users',
         unit='users',
         callbacks=[observe_total_users],
     )
 
     meter.create_observable_gauge(
-        name='webui.users.active',
+        name='qlcode_chat.users.active',
         description='Number of currently active users',
         unit='users',
         callbacks=[observe_active_users],
     )
 
     meter.create_observable_gauge(
-        name='webui.users.active.today',
+        name='qlcode_chat.users.active.today',
         description='Number of users active since midnight today',
         unit='users',
         callbacks=[observe_users_active_today],

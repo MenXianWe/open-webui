@@ -51,7 +51,8 @@
 	import { updateUserSettings } from '$lib/apis/users';
 	import { checkActiveChats } from '$lib/apis/tasks';
 	import { createNoteHandler } from '$lib/components/notes/utils';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_BRAND_LOGO_URL } from '$lib/constants';
+	import { resolveUserProfileImage } from '$lib/utils';
 
 	import ArchivedChatsModal from './ArchivedChatsModal.svelte';
 	import UserMenu from './Sidebar/UserMenu.svelte';
@@ -77,6 +78,19 @@
 
 	const BREAKPOINT = 768;
 	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
+
+	const getCurrentUserProfileImageUrl = () =>
+		resolveUserProfileImage($user?.profile_image_url, $user?.name, $user?.email);
+
+	const useDefaultUserImage = (event: Event) => {
+		const image = event.currentTarget as HTMLImageElement;
+		const initialsImageUrl = getCurrentUserProfileImageUrl();
+		if (image.src === initialsImageUrl) {
+			return;
+		}
+
+		image.src = initialsImageUrl;
+	};
 
 	let scrollTop = 0;
 
@@ -802,7 +816,7 @@
 					>
 						<div class=" self-center flex items-center justify-center size-9">
 							<img
-								src="{WEBUI_BASE_URL}/static/favicon.png"
+								src={WEBUI_BRAND_LOGO_URL}
 								class="sidebar-new-chat-icon size-6 rounded-full group-hover:hidden"
 								alt=""
 							/>
@@ -952,10 +966,11 @@
 							>
 								<div class="self-center relative">
 									<img
-										src={`${WEBUI_API_BASE_URL}/users/${$user?.id}/profile/image`}
+										src={getCurrentUserProfileImageUrl()}
 										class=" size-7 object-cover rounded-full"
 										alt={$i18n.t('Open User Profile Menu')}
 										aria-label={$i18n.t('Open User Profile Menu')}
+										on:error={useDefaultUserImage}
 									/>
 
 									{#if $config?.features?.enable_user_status}
@@ -1010,8 +1025,7 @@
 					on:click={newChatHandler}
 				>
 					<img
-						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/favicon.png"
+						src={WEBUI_BRAND_LOGO_URL}
 						class="sidebar-new-chat-icon size-6 rounded-full"
 						alt=""
 					/>
@@ -1019,7 +1033,7 @@
 
 				<a href="/" class="flex flex-1 px-0.5" on:click={newChatHandler}>
 					<div
-						id="sidebar-webui-name"
+						id="sidebar-qlcode-chat-name"
 						class=" self-center font-medium text-gray-850 dark:text-white font-primary"
 					>
 						{$WEBUI_NAME}
@@ -1612,10 +1626,11 @@
 							>
 								<div class=" self-center mr-3 relative">
 									<img
-										src={`${WEBUI_API_BASE_URL}/users/${$user?.id}/profile/image`}
+										src={getCurrentUserProfileImageUrl()}
 										class=" size-7 object-cover rounded-full"
 										alt={$i18n.t('Open User Profile Menu')}
 										aria-label={$i18n.t('Open User Profile Menu')}
+										on:error={useDefaultUserImage}
 									/>
 
 									{#if $config?.features?.enable_user_status}

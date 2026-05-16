@@ -36,7 +36,7 @@ export const addOpenAIConnection = async (
 	}
 
 	return await updateOpenAIConfig(token, {
-		ENABLE_OPENAI_API: current?.ENABLE_OPENAI_API ?? true,
+		ENABLE_OPENAI_API: current?.ENABLE_OPENAI_API ?? false,
 		OPENAI_API_BASE_URLS: urls,
 		OPENAI_API_KEYS: keys,
 		OPENAI_API_CONFIGS: configs
@@ -67,7 +67,7 @@ export const removeOpenAIConnection = async (token: string, url: string) => {
 	});
 
 	return await updateOpenAIConfig(token, {
-		ENABLE_OPENAI_API: current?.ENABLE_OPENAI_API ?? true,
+		ENABLE_OPENAI_API: current?.ENABLE_OPENAI_API ?? false,
 		OPENAI_API_BASE_URLS: newUrls,
 		OPENAI_API_KEYS: newKeys,
 		OPENAI_API_CONFIGS: newConfigs

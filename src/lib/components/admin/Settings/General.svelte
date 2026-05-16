@@ -6,6 +6,7 @@
 		getAdminConfig,
 		getLdapConfig,
 		getLdapServer,
+		testSmtpEmail,
 		updateAdminConfig,
 		updateLdapConfig,
 		updateLdapServer
@@ -27,11 +28,19 @@
 
 	export let saveHandler: Function;
 
-	let adminConfig = null;
+	let adminConfig: any = null;
 	let webhookUrl = '';
-	let groups = [];
+	let smtpTestRecipientEmail = '';
+	let groups: any[] = [];
 
 	let banners: Banner[] = [];
+
+	type LoginTermsDocument = {
+		id: string;
+		title: string;
+		slug: string;
+		content: string;
+	};
 
 	// LDAP
 	let ENABLE_LDAP = false;
@@ -50,6 +59,55 @@
 		ciphers: ''
 	};
 
+	const normalizeTermsSlug = (value: string) => {
+		return (
+			value
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9-]+/g, '-')
+				.replace(/^-+|-+$/g, '') || 'terms'
+		);
+	};
+
+	const normalizeAdminConfig = (value: any) => {
+		const documents = Array.isArray(value?.LOGIN_TERMS_DOCUMENTS)
+			? value.LOGIN_TERMS_DOCUMENTS.map((document, index) => ({
+					id: document.id || uuidv4(),
+					title: document.title || `文档 ${index + 1}`,
+					slug: normalizeTermsSlug(document.slug || document.title || `document-${index + 1}`),
+					content: document.content || ''
+				}))
+			: [];
+
+		return {
+			...value,
+			SMTP_PASSWORD: '',
+			LOGIN_TERMS_DISPLAY_STYLE:
+				value?.LOGIN_TERMS_DISPLAY_STYLE === 'checkbox' ? 'checkbox' : 'modal',
+			LOGIN_TERMS_UPDATED_AT: (value?.LOGIN_TERMS_UPDATED_AT || '2026-03-31').replace(/\//g, '-'),
+			LOGIN_TERMS_DOCUMENTS: documents
+		};
+	};
+
+	const addLoginTermsDocument = () => {
+		const nextIndex = (adminConfig.LOGIN_TERMS_DOCUMENTS?.length ?? 0) + 1;
+		adminConfig.LOGIN_TERMS_DOCUMENTS = [
+			...(adminConfig.LOGIN_TERMS_DOCUMENTS ?? []),
+			{
+				id: uuidv4(),
+				title: `新文档 ${nextIndex}`,
+				slug: `document-${nextIndex}`,
+				content: `# 新文档 ${nextIndex}\n\n请在这里填写 Markdown 内容。`
+			}
+		];
+	};
+
+	const removeLoginTermsDocument = (documentId: string) => {
+		adminConfig.LOGIN_TERMS_DOCUMENTS = (adminConfig.LOGIN_TERMS_DOCUMENTS ?? []).filter(
+			(document) => document.id !== documentId
+		);
+	};
+
 	const updateLdapServerHandler = async () => {
 		if (!ENABLE_LDAP) return;
 		const res = await updateLdapServer(localStorage.token, LDAP_SERVER).catch((error) => {
@@ -65,6 +123,40 @@
 		_banners.set(await setBanners(localStorage.token, banners));
 	};
 
+	const saveAdminConfigOnly = async () => {
+		const res = await updateAdminConfig(localStorage.token, adminConfig);
+		if (res) {
+			adminConfig = normalizeAdminConfig({ ...adminConfig, ...res });
+		}
+		return res;
+	};
+
+	const testSmtpHandler = async (recipientEmail: string) => {
+		const saved = await saveAdminConfigOnly().catch((error) => {
+			toast.error(`${error}`);
+			return null;
+		});
+
+		if (!saved) {
+			return;
+		}
+
+		const target = recipientEmail.trim();
+		if (!target) {
+			toast.error('请先填写测试收件人邮箱');
+			return;
+		}
+
+		const res = await testSmtpEmail(localStorage.token, target).catch((error) => {
+			toast.error(`${error}`);
+			return null;
+		});
+
+		if (res) {
+			toast.success('测试邮件已发送');
+		}
+	};
+
 	const updateHandler = async () => {
 		webhookUrl = await updateWebhookUrl(localStorage.token, webhookUrl);
 		const res = await updateAdminConfig(localStorage.token, adminConfig);
@@ -76,6 +168,7 @@
 		await config.set(await getBackendConfig());
 
 		if (res) {
+			adminConfig = normalizeAdminConfig({ ...adminConfig, ...res });
 			saveHandler();
 		} else {
 			toast.error($i18n.t('Failed to update settings'));
@@ -85,7 +178,7 @@
 	onMount(async () => {
 		await Promise.all([
 			(async () => {
-				adminConfig = await getAdminConfig(localStorage.token);
+				adminConfig = normalizeAdminConfig(await getAdminConfig(localStorage.token));
 			})(),
 
 			(async () => {
@@ -136,7 +229,6 @@
 							</div>
 						</div>
 					</div>
-
 				</div>
 
 				<div class="mb-3">
@@ -259,7 +351,11 @@
 								/>
 
 								<div class="mt-2 text-xs text-gray-400 dark:text-gray-500">
-									<span>{$i18n.t('Configure only endpoints that should be available to API keys.')}</span>
+									<span
+										>{$i18n.t(
+											'Configure only endpoints that should be available to API keys.'
+										)}</span
+									>
 								</div>
 							</div>
 						{/if}
@@ -293,9 +389,7 @@
 								>
 									<div>
 										<span class=" font-medium">{$i18n.t('Warning')}:</span>
-										<span
-											>{$i18n.t('No expiration can pose security risks.')}</span
-										>
+										<span>{$i18n.t('No expiration can pose security risks.')}</span>
 									</div>
 								</div>
 							</div>
@@ -652,6 +746,363 @@
 							{$i18n.t(
 								'Enter the public URL of your QLCodeChat deployment. This URL will be used to generate links in the notifications.'
 							)}
+						</div>
+					</div>
+
+					<div class="mb-2.5 w-full justify-between">
+						<div class="flex w-full justify-between">
+							<div class=" self-center text-xs font-medium">使用教程 URL</div>
+						</div>
+
+						<div class="flex mt-2 space-x-2">
+							<input
+								class="w-full rounded-lg py-2 px-4 text-sm bg-gray-50 dark:text-gray-300 dark:bg-gray-850 outline-hidden"
+								type="url"
+								placeholder="https://qlcodeapi.com/"
+								bind:value={adminConfig.QLCODE_TUTORIAL_URL}
+							/>
+						</div>
+
+						<div class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+							登录页右上角“使用教程”按钮会跳转到这个地址。
+						</div>
+					</div>
+
+					<div
+						class="mb-3.5 w-full overflow-hidden rounded-xl border border-gray-100 dark:border-gray-850"
+					>
+						<div
+							class="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-850"
+						>
+							<div>
+								<div class="text-sm font-semibold text-gray-900 dark:text-gray-50">
+									登录条款确认
+								</div>
+								<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+									控制登录页是否要求用户先阅读并同意服务条款、隐私政策或其他 Markdown 文档。
+								</div>
+							</div>
+							<div class="flex shrink-0 items-center gap-2">
+								<span class="text-xs text-gray-500 dark:text-gray-400">
+									{adminConfig.LOGIN_TERMS_ENABLED ? '已启用' : '已关闭'}
+								</span>
+								<Switch bind:state={adminConfig.LOGIN_TERMS_ENABLED} />
+							</div>
+						</div>
+
+						<div class="grid gap-4 px-4 py-3 md:grid-cols-[1fr_220px]">
+							<div>
+								<div class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">
+									展示形式
+								</div>
+								<div
+									class="grid grid-cols-2 overflow-hidden rounded-lg bg-gray-100 p-1 dark:bg-gray-850"
+								>
+									<button
+										type="button"
+										class="rounded-md px-3 py-2 text-xs font-semibold transition {adminConfig.LOGIN_TERMS_DISPLAY_STYLE ===
+										'modal'
+											? 'bg-white text-teal-700 shadow-sm dark:bg-gray-700 dark:text-teal-200'
+											: 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'}"
+										on:click={() => {
+											adminConfig.LOGIN_TERMS_DISPLAY_STYLE = 'modal';
+										}}
+									>
+										弹窗
+									</button>
+									<button
+										type="button"
+										class="rounded-md px-3 py-2 text-xs font-semibold transition {adminConfig.LOGIN_TERMS_DISPLAY_STYLE ===
+										'checkbox'
+											? 'bg-white text-teal-700 shadow-sm dark:bg-gray-700 dark:text-teal-200'
+											: 'text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white'}"
+										on:click={() => {
+											adminConfig.LOGIN_TERMS_DISPLAY_STYLE = 'checkbox';
+										}}
+									>
+										复选框
+									</button>
+								</div>
+								<div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+									弹窗会在登录页打开；复选框会直接显示在登录按钮上方。
+								</div>
+							</div>
+
+							<label class="block">
+								<div class="mb-2 text-xs font-medium text-gray-700 dark:text-gray-300">
+									条款更新日期
+								</div>
+								<input
+									class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+									type="date"
+									bind:value={adminConfig.LOGIN_TERMS_UPDATED_AT}
+								/>
+								<div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+									日期或文档内容变更后，用户需要重新同意。
+								</div>
+							</label>
+						</div>
+
+						<div class="border-t border-gray-100 px-4 py-3 dark:border-gray-850">
+							<div class="mb-3 flex items-center justify-between gap-3">
+								<div>
+									<div class="text-xs font-semibold text-gray-800 dark:text-gray-100">协议文档</div>
+									<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+										文档名称可自定义，内容按 Markdown 保存。
+									</div>
+								</div>
+								<button
+									class="shrink-0 rounded-lg bg-teal-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-teal-700"
+									type="button"
+									on:click={addLoginTermsDocument}
+								>
+									添加文档
+								</button>
+							</div>
+
+							<div class="space-y-3">
+								{#each adminConfig.LOGIN_TERMS_DOCUMENTS as document}
+									<div class="rounded-xl border border-gray-100 p-3 dark:border-gray-850">
+										<div class="mb-3 flex items-start justify-between gap-3">
+											<div>
+												<div class="text-sm font-semibold text-gray-900 dark:text-gray-50">
+													{document.title || '未命名文档'}
+												</div>
+												<div class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+													/legal/{document.slug || 'terms'}
+												</div>
+											</div>
+											<button
+												class="rounded-lg px-2 py-1 text-xs font-semibold text-red-500 transition hover:bg-red-50 dark:hover:bg-red-950/30"
+												type="button"
+												on:click={() => {
+													removeLoginTermsDocument(document.id);
+												}}
+											>
+												删除
+											</button>
+										</div>
+
+										<div class="grid gap-3 md:grid-cols-2">
+											<label class="block">
+												<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+													文档名称
+												</div>
+												<input
+													class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+													type="text"
+													bind:value={document.title}
+												/>
+											</label>
+
+											<label class="block">
+												<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+													路由标识
+												</div>
+												<div
+													class="flex overflow-hidden rounded-lg border border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-850"
+												>
+													<span
+														class="flex items-center border-r border-gray-100 px-3 text-sm text-gray-500 dark:border-gray-800 dark:text-gray-400"
+													>
+														/legal/
+													</span>
+													<input
+														class="min-w-0 flex-1 bg-transparent px-4 py-2 text-sm outline-hidden dark:text-gray-100"
+														type="text"
+														bind:value={document.slug}
+														on:blur={() => {
+															document.slug = normalizeTermsSlug(document.slug);
+														}}
+													/>
+												</div>
+											</label>
+										</div>
+
+										<label class="mt-3 block">
+											<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+												Markdown 内容
+											</div>
+											<textarea
+												class="min-h-48 w-full resize-y rounded-xl bg-gray-50 px-4 py-3 font-mono text-sm leading-6 outline-hidden dark:bg-gray-850 dark:text-gray-100"
+												bind:value={document.content}
+											/>
+										</label>
+									</div>
+								{/each}
+							</div>
+						</div>
+					</div>
+
+					<div
+						class="mb-3.5 w-full overflow-hidden rounded-xl border border-gray-100 dark:border-gray-850"
+					>
+						<div
+							class="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 dark:border-gray-850"
+						>
+							<div>
+								<div class="text-sm font-semibold text-gray-900 dark:text-gray-50">SMTP 设置</div>
+								<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+									配置用于发送注册邮箱验证码的邮件服务
+								</div>
+							</div>
+
+							<button
+								class="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-800 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-850"
+								type="button"
+								on:click={() => {
+									testSmtpHandler(adminConfig.SMTP_FROM_EMAIL || adminConfig.ADMIN_EMAIL || '');
+								}}
+							>
+								测试连接
+							</button>
+						</div>
+
+						<div class="grid gap-3 px-4 py-3 md:grid-cols-2">
+							<label class="block">
+								<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+									SMTP 主机
+								</div>
+								<input
+									class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+									type="text"
+									placeholder="smtpdm.aliyun.com"
+									bind:value={adminConfig.SMTP_HOST}
+								/>
+							</label>
+
+							<label class="block">
+								<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+									SMTP 端口
+								</div>
+								<input
+									class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+									type="number"
+									min="1"
+									max="65535"
+									placeholder="465"
+									bind:value={adminConfig.SMTP_PORT}
+								/>
+							</label>
+
+							<label class="block">
+								<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+									SMTP 用户名
+								</div>
+								<input
+									class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+									type="text"
+									placeholder="no-reply@mail.qlcodeapi.com"
+									bind:value={adminConfig.SMTP_USERNAME}
+								/>
+							</label>
+
+							<label class="block">
+								<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+									SMTP 密码
+								</div>
+								<SensitiveInput
+									id="smtp-password"
+									bind:value={adminConfig.SMTP_PASSWORD}
+									placeholder={adminConfig.SMTP_PASSWORD_CONFIGURED
+										? '留空以保留当前密码'
+										: '请输入 SMTP 密码'}
+									required={false}
+									outerClassName="flex w-full rounded-lg bg-gray-50 px-4 py-2 dark:bg-gray-850"
+									inputClassName="w-full bg-transparent text-sm dark:text-gray-100"
+									showButtonClassName="pl-2 text-gray-600 transition hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+								/>
+								{#if adminConfig.SMTP_PASSWORD_CONFIGURED}
+									<div class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+										密码已配置，留空将保留当前值。
+									</div>
+								{/if}
+							</label>
+
+							<label class="block">
+								<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+									发件人邮箱
+								</div>
+								<input
+									class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+									type="email"
+									placeholder="no-reply@mail.qlcodeapi.com"
+									bind:value={adminConfig.SMTP_FROM_EMAIL}
+								/>
+							</label>
+
+							<label class="block">
+								<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+									发件人名称
+								</div>
+								<input
+									class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+									type="text"
+									placeholder="QLCodeChat"
+									bind:value={adminConfig.SMTP_FROM_NAME}
+								/>
+							</label>
+						</div>
+
+						<div
+							class="flex items-center justify-between border-t border-gray-100 px-4 py-3 dark:border-gray-850"
+						>
+							<div>
+								<div class="text-xs font-semibold text-gray-800 dark:text-gray-100">
+									启用注册邮箱验证码
+								</div>
+								<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+									开启后，新用户注册需要先通过邮箱验证码。
+								</div>
+							</div>
+							<Switch bind:state={adminConfig.ENABLE_EMAIL_VERIFICATION} />
+						</div>
+
+						<div
+							class="flex items-center justify-between border-t border-gray-100 px-4 py-3 dark:border-gray-850"
+						>
+							<div>
+								<div class="text-xs font-semibold text-gray-800 dark:text-gray-100">使用 TLS</div>
+								<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+									为 SMTP 连接启用 TLS 加密。
+								</div>
+							</div>
+							<Switch bind:state={adminConfig.SMTP_USE_TLS} />
+						</div>
+					</div>
+
+					<div
+						class="mb-3.5 w-full overflow-hidden rounded-xl border border-gray-100 dark:border-gray-850"
+					>
+						<div class="border-b border-gray-100 px-4 py-3 dark:border-gray-850">
+							<div class="text-sm font-semibold text-gray-900 dark:text-gray-50">发送测试邮件</div>
+							<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+								发送测试邮件以验证 SMTP 配置
+							</div>
+						</div>
+
+						<div class="flex items-end gap-3 px-4 py-3">
+							<label class="min-w-0 flex-1">
+								<div class="mb-1.5 text-xs font-medium text-gray-700 dark:text-gray-300">
+									收件人邮箱
+								</div>
+								<input
+									class="w-full rounded-lg bg-gray-50 px-4 py-2 text-sm outline-hidden dark:bg-gray-850 dark:text-gray-100"
+									type="email"
+									placeholder="test@example.com"
+									bind:value={smtpTestRecipientEmail}
+								/>
+							</label>
+							<button
+								class="shrink-0 rounded-lg border border-gray-200 px-3.5 py-2 text-xs font-medium text-gray-800 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-850"
+								type="button"
+								disabled={!smtpTestRecipientEmail.trim()}
+								on:click={() => {
+									testSmtpHandler(smtpTestRecipientEmail);
+								}}
+							>
+								发送测试邮件
+							</button>
 						</div>
 					</div>
 

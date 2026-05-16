@@ -3,6 +3,7 @@
 .gitignore
 .DS_Store
 docs
+release
 kubernetes
 node_modules
 /.svelte-kit
@@ -29,3 +30,7 @@ uploads
 **/*.db
 _test
 backend/data/*
+*.tar
+*.tar.gz
+*.tgz
+*.zip

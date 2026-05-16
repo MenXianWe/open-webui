@@ -42,6 +42,7 @@ from open_webui.env import (
     ENABLE_INITIAL_ADMIN_SIGNUP,
     ENABLE_OAUTH_TOKEN_EXCHANGE,
     AIOHTTP_CLIENT_SESSION_SSL,
+    WEBUI_SECRET_KEY,
 )
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response, JSONResponse
@@ -53,9 +54,11 @@ from open_webui.config import (
     ENABLE_PASSWORD_AUTH,
     OAUTH_PROVIDERS,
     OAUTH_MERGE_ACCOUNTS_BY_EMAIL,
+    LoginTermsDocumentModel,
+    normalize_login_terms_documents,
 )
 from open_webui.utils.oauth import auth_manager_config
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from open_webui.utils.misc import parse_duration, validate_email_format
 from open_webui.utils.auth import (
@@ -76,6 +79,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from open_webui.utils.webhook import post_webhook
 from open_webui.utils.access_control import get_permissions, has_permission
 from open_webui.utils.groups import apply_default_group_assignment
+from open_webui.utils.email_verification import (
+    generate_verification_code,
+    is_smtp_configured,
+    render_verification_email,
+    send_smtp_email_async,
+    store_verification_code,
+    verify_verification_code,
+)
 
 from open_webui.utils.redis import get_redis_client
 from open_webui.utils.rate_limit import RateLimiter
@@ -95,6 +106,24 @@ log = logging.getLogger(__name__)
 # Forgive us our failed attempts, as we forgive those
 # who exceed their allotted rate against this gate.
 signin_rate_limiter = RateLimiter(redis_client=get_redis_client(), limit=5 * 3, window=60 * 3)
+email_verification_rate_limiter = RateLimiter(redis_client=get_redis_client(), limit=5, window=60 * 10)
+
+
+def validate_login_terms_acceptance(
+    request: Request,
+    terms_accepted: Optional[bool],
+    terms_updated_at: Optional[str],
+) -> None:
+    if not request.app.state.config.LOGIN_TERMS_ENABLED:
+        return
+
+    if not terms_accepted:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='请先阅读并同意服务条款。')
+
+    configured_updated_at = str(request.app.state.config.LOGIN_TERMS_UPDATED_AT or '').strip()
+    accepted_updated_at = str(terms_updated_at or '').strip()
+    if configured_updated_at and configured_updated_at != accepted_updated_at:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='服务条款已更新，请重新阅读并同意。')
 
 
 async def create_session_response(
@@ -339,6 +368,8 @@ async def ldap_auth(
     # which would grant access without valid credentials.
     if not form_data.password or not form_data.password.strip():
         raise HTTPException(400, detail=ERROR_MESSAGES.INVALID_CRED)
+
+    validate_login_terms_acceptance(request, form_data.terms_accepted, form_data.terms_updated_at)
 
     # NOW load LDAP config variables
     LDAP_SERVER_LABEL = request.app.state.config.LDAP_SERVER_LABEL
@@ -648,6 +679,8 @@ async def signin(
                 db=db,
             )
     else:
+        validate_login_terms_acceptance(request, form_data.terms_accepted, form_data.terms_updated_at)
+
         if signin_rate_limiter.is_limited(form_data.email.lower()):
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -678,6 +711,76 @@ async def signin(
 ############################
 # SignUp
 ############################
+
+
+class EmailVerificationSendForm(BaseModel):
+    email: str
+
+
+class SmtpTestEmailForm(BaseModel):
+    recipient_email: str
+
+
+def get_smtp_settings(config) -> dict:
+    return {
+        'host': str(config.SMTP_HOST or '').strip(),
+        'port': int(config.SMTP_PORT or 465),
+        'username': str(config.SMTP_USERNAME or '').strip(),
+        'password': str(config.SMTP_PASSWORD or ''),
+        'from_email': str(config.SMTP_FROM_EMAIL or '').strip(),
+        'from_name': str(config.SMTP_FROM_NAME or 'QLCodeChat').strip() or 'QLCodeChat',
+        'use_tls': bool(config.SMTP_USE_TLS),
+    }
+
+
+async def send_email_verification_code(request: Request, email: str, db: AsyncSession) -> dict:
+    email = email.lower().strip()
+
+    if not request.app.state.config.ENABLE_EMAIL_VERIFICATION:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail='邮箱验证码未启用。')
+
+    if not validate_email_format(email):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT)
+
+    if await Users.get_user_by_email(email, db=db):
+        raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
+
+    if email_verification_rate_limiter.is_limited(email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=ERROR_MESSAGES.RATE_LIMIT_EXCEEDED,
+        )
+
+    if not is_smtp_configured(request.app.state.config):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='SMTP 未配置，无法发送邮箱验证码。')
+
+    ttl_seconds = int(request.app.state.config.EMAIL_VERIFICATION_TTL_SECONDS or 600)
+    code = generate_verification_code()
+    store_verification_code(email, 'signup', code, WEBUI_SECRET_KEY, ttl_seconds)
+    subject, text, html = render_verification_email(code, ttl_seconds)
+
+    try:
+        await send_smtp_email_async(
+            **get_smtp_settings(request.app.state.config),
+            to_email=email,
+            subject=subject,
+            text=text,
+            html=html,
+        )
+    except Exception as e:
+        log.exception(f'Failed to send email verification code: {e}')
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail='验证码邮件发送失败，请稍后再试。')
+
+    return {'status': True, 'expires_in': ttl_seconds}
+
+
+@router.post('/email/verification/send')
+async def send_signup_email_verification_code(
+    request: Request,
+    form_data: EmailVerificationSendForm,
+    db: AsyncSession = Depends(get_async_session),
+):
+    return await send_email_verification_code(request, form_data.email, db)
 
 
 async def signup_handler(
@@ -717,7 +820,6 @@ async def signup_handler(
     if await Users.get_num_users(db=db) == 1:
         await Users.update_user_role_by_id(user.id, 'admin', db=db)
         user = await Users.get_user_by_id(user.id, db=db)
-        request.app.state.config.ENABLE_SIGNUP = False
 
     if request.app.state.config.WEBHOOK_URL:
         await post_webhook(
@@ -763,11 +865,24 @@ async def signup(
     if await Users.get_user_by_email(form_data.email.lower(), db=db):
         raise HTTPException(400, detail=ERROR_MESSAGES.EMAIL_TAKEN)
 
+    validate_login_terms_acceptance(request, form_data.terms_accepted, form_data.terms_updated_at)
+
     try:
         try:
             validate_password(form_data.password)
         except Exception as e:
             raise HTTPException(400, detail=str(e))
+
+        if request.app.state.config.ENABLE_EMAIL_VERIFICATION and has_users:
+            if not form_data.email_verification_code:
+                raise HTTPException(400, detail='请输入邮箱验证码。')
+            if not verify_verification_code(
+                form_data.email,
+                'signup',
+                form_data.email_verification_code,
+                WEBUI_SECRET_KEY,
+            ):
+                raise HTTPException(400, detail='邮箱验证码错误或已过期。')
 
         user = await signup_handler(
             request,
@@ -1003,6 +1118,20 @@ async def get_admin_config(request: Request, user=Depends(get_admin_user)):
         'SHOW_ADMIN_DETAILS': request.app.state.config.SHOW_ADMIN_DETAILS,
         'ADMIN_EMAIL': request.app.state.config.ADMIN_EMAIL,
         'WEBUI_URL': request.app.state.config.WEBUI_URL,
+        'QLCODE_TUTORIAL_URL': request.app.state.config.QLCODE_TUTORIAL_URL,
+        'LOGIN_TERMS_ENABLED': request.app.state.config.LOGIN_TERMS_ENABLED,
+        'LOGIN_TERMS_DISPLAY_STYLE': request.app.state.config.LOGIN_TERMS_DISPLAY_STYLE,
+        'LOGIN_TERMS_UPDATED_AT': request.app.state.config.LOGIN_TERMS_UPDATED_AT,
+        'LOGIN_TERMS_DOCUMENTS': normalize_login_terms_documents(request.app.state.config.LOGIN_TERMS_DOCUMENTS),
+        'ENABLE_EMAIL_VERIFICATION': request.app.state.config.ENABLE_EMAIL_VERIFICATION,
+        'SMTP_HOST': request.app.state.config.SMTP_HOST,
+        'SMTP_PORT': request.app.state.config.SMTP_PORT,
+        'SMTP_USERNAME': request.app.state.config.SMTP_USERNAME,
+        'SMTP_PASSWORD': '',
+        'SMTP_PASSWORD_CONFIGURED': bool(request.app.state.config.SMTP_PASSWORD),
+        'SMTP_FROM_EMAIL': request.app.state.config.SMTP_FROM_EMAIL,
+        'SMTP_FROM_NAME': request.app.state.config.SMTP_FROM_NAME,
+        'SMTP_USE_TLS': request.app.state.config.SMTP_USE_TLS,
         'ENABLE_SIGNUP': request.app.state.config.ENABLE_SIGNUP,
         'ENABLE_API_KEYS': request.app.state.config.ENABLE_API_KEYS,
         'ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS': request.app.state.config.ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS,
@@ -1033,6 +1162,19 @@ class AdminConfig(BaseModel):
     SHOW_ADMIN_DETAILS: bool
     ADMIN_EMAIL: Optional[str] = None
     WEBUI_URL: str
+    QLCODE_TUTORIAL_URL: Optional[str] = None
+    LOGIN_TERMS_ENABLED: bool = True
+    LOGIN_TERMS_DISPLAY_STYLE: str = 'modal'
+    LOGIN_TERMS_UPDATED_AT: str = '2026-03-31'
+    LOGIN_TERMS_DOCUMENTS: list[LoginTermsDocumentModel] = Field(default_factory=list)
+    ENABLE_EMAIL_VERIFICATION: bool = False
+    SMTP_HOST: Optional[str] = ''
+    SMTP_PORT: Optional[int | str] = 465
+    SMTP_USERNAME: Optional[str] = ''
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = ''
+    SMTP_FROM_NAME: Optional[str] = 'QLCodeChat'
+    SMTP_USE_TLS: bool = True
     ENABLE_SIGNUP: bool
     ENABLE_API_KEYS: bool
     ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS: bool
@@ -1063,6 +1205,29 @@ async def update_admin_config(request: Request, form_data: AdminConfig, user=Dep
     request.app.state.config.SHOW_ADMIN_DETAILS = form_data.SHOW_ADMIN_DETAILS
     request.app.state.config.ADMIN_EMAIL = form_data.ADMIN_EMAIL
     request.app.state.config.WEBUI_URL = form_data.WEBUI_URL
+    request.app.state.config.QLCODE_TUTORIAL_URL = (
+        (form_data.QLCODE_TUTORIAL_URL or '').strip() or 'https://qlcodeapi.com/'
+    )
+    request.app.state.config.LOGIN_TERMS_ENABLED = form_data.LOGIN_TERMS_ENABLED
+    request.app.state.config.LOGIN_TERMS_DISPLAY_STYLE = (
+        form_data.LOGIN_TERMS_DISPLAY_STYLE if form_data.LOGIN_TERMS_DISPLAY_STYLE in {'modal', 'checkbox'} else 'modal'
+    )
+    request.app.state.config.LOGIN_TERMS_UPDATED_AT = (form_data.LOGIN_TERMS_UPDATED_AT or '').strip() or '2026-03-31'
+    request.app.state.config.LOGIN_TERMS_DOCUMENTS = normalize_login_terms_documents(
+        [document.model_dump() for document in form_data.LOGIN_TERMS_DOCUMENTS]
+    )
+    request.app.state.config.ENABLE_EMAIL_VERIFICATION = form_data.ENABLE_EMAIL_VERIFICATION
+    request.app.state.config.SMTP_HOST = (form_data.SMTP_HOST or '').strip()
+    try:
+        request.app.state.config.SMTP_PORT = int(form_data.SMTP_PORT or 465)
+    except (TypeError, ValueError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='SMTP 端口必须是数字。')
+    request.app.state.config.SMTP_USERNAME = (form_data.SMTP_USERNAME or '').strip()
+    if form_data.SMTP_PASSWORD is not None and form_data.SMTP_PASSWORD != '':
+        request.app.state.config.SMTP_PASSWORD = form_data.SMTP_PASSWORD
+    request.app.state.config.SMTP_FROM_EMAIL = (form_data.SMTP_FROM_EMAIL or '').strip()
+    request.app.state.config.SMTP_FROM_NAME = (form_data.SMTP_FROM_NAME or '').strip() or 'QLCodeChat'
+    request.app.state.config.SMTP_USE_TLS = form_data.SMTP_USE_TLS
     request.app.state.config.ENABLE_SIGNUP = form_data.ENABLE_SIGNUP
 
     request.app.state.config.ENABLE_API_KEYS = form_data.ENABLE_API_KEYS
@@ -1111,6 +1276,20 @@ async def update_admin_config(request: Request, form_data: AdminConfig, user=Dep
         'SHOW_ADMIN_DETAILS': request.app.state.config.SHOW_ADMIN_DETAILS,
         'ADMIN_EMAIL': request.app.state.config.ADMIN_EMAIL,
         'WEBUI_URL': request.app.state.config.WEBUI_URL,
+        'QLCODE_TUTORIAL_URL': request.app.state.config.QLCODE_TUTORIAL_URL,
+        'LOGIN_TERMS_ENABLED': request.app.state.config.LOGIN_TERMS_ENABLED,
+        'LOGIN_TERMS_DISPLAY_STYLE': request.app.state.config.LOGIN_TERMS_DISPLAY_STYLE,
+        'LOGIN_TERMS_UPDATED_AT': request.app.state.config.LOGIN_TERMS_UPDATED_AT,
+        'LOGIN_TERMS_DOCUMENTS': normalize_login_terms_documents(request.app.state.config.LOGIN_TERMS_DOCUMENTS),
+        'ENABLE_EMAIL_VERIFICATION': request.app.state.config.ENABLE_EMAIL_VERIFICATION,
+        'SMTP_HOST': request.app.state.config.SMTP_HOST,
+        'SMTP_PORT': request.app.state.config.SMTP_PORT,
+        'SMTP_USERNAME': request.app.state.config.SMTP_USERNAME,
+        'SMTP_PASSWORD': '',
+        'SMTP_PASSWORD_CONFIGURED': bool(request.app.state.config.SMTP_PASSWORD),
+        'SMTP_FROM_EMAIL': request.app.state.config.SMTP_FROM_EMAIL,
+        'SMTP_FROM_NAME': request.app.state.config.SMTP_FROM_NAME,
+        'SMTP_USE_TLS': request.app.state.config.SMTP_USE_TLS,
         'ENABLE_SIGNUP': request.app.state.config.ENABLE_SIGNUP,
         'ENABLE_API_KEYS': request.app.state.config.ENABLE_API_KEYS,
         'ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS': request.app.state.config.ENABLE_API_KEYS_ENDPOINT_RESTRICTIONS,
@@ -1135,6 +1314,35 @@ async def update_admin_config(request: Request, form_data: AdminConfig, user=Dep
         'PENDING_USER_OVERLAY_CONTENT': request.app.state.config.PENDING_USER_OVERLAY_CONTENT,
         'RESPONSE_WATERMARK': request.app.state.config.RESPONSE_WATERMARK,
     }
+
+
+@router.post('/admin/config/smtp/test')
+async def send_smtp_test_email(request: Request, form_data: SmtpTestEmailForm, user=Depends(get_admin_user)):
+    recipient_email = form_data.recipient_email.lower().strip()
+    if not validate_email_format(recipient_email):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=ERROR_MESSAGES.INVALID_EMAIL_FORMAT)
+
+    if not is_smtp_configured(request.app.state.config):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, detail='SMTP 未配置，无法发送测试邮件。')
+
+    try:
+        await send_smtp_email_async(
+            **get_smtp_settings(request.app.state.config),
+            to_email=recipient_email,
+            subject='QLCodeChat SMTP 测试邮件',
+            text='这是一封 QLCodeChat SMTP 配置测试邮件。收到此邮件表示 SMTP 配置可用。',
+            html="""
+            <div style="font-family:Arial,'Microsoft YaHei',sans-serif;color:#111827;line-height:1.7">
+              <h2 style="margin:0 0 16px;color:#061155">QLCodeChat SMTP 测试邮件</h2>
+              <p>收到此邮件表示 SMTP 配置可用。</p>
+            </div>
+            """,
+        )
+    except Exception as e:
+        log.exception(f'Failed to send SMTP test email: {e}')
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail='测试邮件发送失败，请检查 SMTP 配置。')
+
+    return {'status': True}
 
 
 class LdapServerConfig(BaseModel):

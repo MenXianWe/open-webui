@@ -54,11 +54,15 @@ class SigninResponse(Token, UserProfileImageResponse):
 class SigninForm(BaseModel):
     email: str
     password: str
+    terms_accepted: Optional[bool] = False
+    terms_updated_at: Optional[str] = None
 
 
 class LdapForm(BaseModel):
     user: str
     password: str
+    terms_accepted: Optional[bool] = False
+    terms_updated_at: Optional[str] = None
 
 
 class ProfileImageUrlForm(BaseModel):
@@ -75,6 +79,9 @@ class SignupForm(BaseModel):
     email: str
     password: str
     profile_image_url: Optional[str] = '/user.png'
+    email_verification_code: Optional[str] = None
+    terms_accepted: Optional[bool] = False
+    terms_updated_at: Optional[str] = None
 
     @field_validator('profile_image_url')
     @classmethod

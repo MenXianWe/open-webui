@@ -18,6 +18,12 @@ ARG USE_AUXILIARY_EMBEDDING_MODEL=TaylorAI/bge-micro-v2
 ARG USE_TIKTOKEN_ENCODING_NAME="cl100k_base"
 
 ARG BUILD_HASH=dev-build
+ARG DEBIAN_APT_MIRROR=http://mirrors.aliyun.com/debian
+ARG DEBIAN_SECURITY_MIRROR=http://mirrors.aliyun.com/debian-security
+ARG NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
+ARG PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+ARG UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+ARG ONNXRUNTIME_NODE_INSTALL_CUDA=skip
 # Override at your own risk - non-root configurations are untested
 ARG UID=0
 ARG GID=0
@@ -25,6 +31,11 @@ ARG GID=0
 ######## WebUI frontend ########
 FROM --platform=$BUILDPLATFORM node:22-alpine3.20 AS build
 ARG BUILD_HASH
+ARG NPM_CONFIG_REGISTRY
+ARG ONNXRUNTIME_NODE_INSTALL_CUDA
+
+ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY} \
+    ONNXRUNTIME_NODE_INSTALL_CUDA=${ONNXRUNTIME_NODE_INSTALL_CUDA}
 
 # Set Node.js options (heap limit Allocation failed - JavaScript heap out of memory)
 # ENV NODE_OPTIONS="--max-old-space-size=4096"
@@ -53,6 +64,10 @@ ARG USE_PERMISSION_HARDENING
 ARG USE_EMBEDDING_MODEL
 ARG USE_RERANKING_MODEL
 ARG USE_AUXILIARY_EMBEDDING_MODEL
+ARG DEBIAN_APT_MIRROR
+ARG DEBIAN_SECURITY_MIRROR
+ARG PYPI_INDEX_URL
+ARG UV_INDEX_URL
 ARG UID
 ARG GID
 
@@ -73,7 +88,24 @@ ENV ENV=prod \
 
 ## Basis URL Config ##
 ENV OLLAMA_BASE_URL="/ollama" \
-    OPENAI_API_BASE_URL=""
+    OPENAI_API_BASE_URL="" \
+    WEBUI_URL="https://chat.qlcodeapi.com/" \
+    QLCODE_TUTORIAL_URL="https://qlcodeapi.com/" \
+    ADMIN_EMAIL="qlcodeapi@qq.com" \
+    ENABLE_OLLAMA_API=false \
+    ENABLE_OPENAI_API=false \
+    ENABLE_DIRECT_CONNECTIONS=true \
+    ENABLE_EMAIL_VERIFICATION=false \
+    LOGIN_TERMS_ENABLED=true \
+    LOGIN_TERMS_DISPLAY_STYLE="modal" \
+    LOGIN_TERMS_UPDATED_AT="2026-03-31" \
+    SMTP_HOST="smtpdm.aliyun.com" \
+    SMTP_PORT=465 \
+    SMTP_USERNAME="no-reply@mail.qlcodeapi.com" \
+    SMTP_PASSWORD="" \
+    SMTP_FROM_EMAIL="no-reply@mail.qlcodeapi.com" \
+    SMTP_FROM_NAME="QLCode API" \
+    SMTP_USE_TLS=true
 
 ## API Key and Security Config ##
 ENV OPENAI_API_KEY="" \
@@ -123,7 +155,14 @@ RUN echo -n 00000000-0000-0000-0000-000000000000 > $HOME/.cache/chroma/telemetry
 RUN chown -R $UID:$GID /app $HOME
 
 # Install common system dependencies
-RUN apt-get update && \
+RUN set -eux; \
+    if [ -n "$DEBIAN_APT_MIRROR" ]; then \
+    sed -i "s|http://deb.debian.org/debian|$DEBIAN_APT_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi; \
+    if [ -n "$DEBIAN_SECURITY_MIRROR" ]; then \
+    sed -i "s|http://deb.debian.org/debian-security|$DEBIAN_SECURITY_MIRROR|g" /etc/apt/sources.list.d/debian.sources; \
+    fi; \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
     git build-essential pandoc gcc netcat-openbsd curl jq \
     libmariadb-dev \
@@ -135,7 +174,9 @@ RUN apt-get update && \
 COPY --chown=$UID:$GID ./backend/requirements.txt ./requirements.txt
 
 # Set UV_LINK_MODE to copy to prevent 0-byte file corruption in QEMU arm64 cross-builds
-ENV UV_LINK_MODE=copy
+ENV UV_LINK_MODE=copy \
+    PIP_INDEX_URL=${PYPI_INDEX_URL} \
+    UV_INDEX_URL=${UV_INDEX_URL}
 
 RUN set -e; \
     pip3 install --no-cache-dir uv; \

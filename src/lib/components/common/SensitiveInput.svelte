@@ -1,6 +1,6 @@
 <script lang="ts">
 	const i18n = getContext('i18n');
-	import { getContext } from 'svelte';
+	import { getContext, onMount } from 'svelte';
 	import { settings } from '$lib/stores';
 	export let id = 'password-input';
 	export let value: string = '';
@@ -14,8 +14,16 @@
 	export let screenReader = true;
 	export let autocomplete = 'off';
 	export let name: string | undefined = undefined;
+	export let autofocus = false;
 
 	let show = false;
+	let inputElement: HTMLInputElement | undefined;
+
+	onMount(() => {
+		if (autofocus) {
+			inputElement?.focus();
+		}
+	});
 </script>
 
 <div class={outerClassName}>
@@ -28,6 +36,7 @@
 		{placeholder}
 		type={type === 'password' && !show ? 'password' : 'text'}
 		bind:value
+		bind:this={inputElement}
 		{name}
 		required={required && !readOnly}
 		disabled={readOnly}

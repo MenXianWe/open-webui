@@ -2,7 +2,7 @@ name: qlcode-chat
 
 services:
   qlcode-chat:
-    image: qlcode-chat:${QLCODE_CHAT_DOCKER_TAG:-v0.9.7}
+    image: qlcode-chat:${QLCODE_CHAT_DOCKER_TAG:-v0.9.8}
     container_name: qlcode-chat
     volumes:
       - qlcode-chat:/app/backend/data
@@ -10,6 +10,24 @@ services:
       - ${QLCODE_CHAT_PORT:-3000}:8080
     environment:
       - WEBUI_SECRET_KEY=${QLCODE_CHAT_SECRET_KEY:?set QLCODE_CHAT_SECRET_KEY in .env}
+      - WEBUI_URL=${WEBUI_URL:-https://chat.qlcodeapi.com/}
+      - QLCODE_TUTORIAL_URL=${QLCODE_TUTORIAL_URL:-https://qlcodeapi.com/}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-qlcodeapi@qq.com}
+      - ENABLE_SIGNUP=${ENABLE_SIGNUP:-true}
+      - ENABLE_OLLAMA_API=${ENABLE_OLLAMA_API:-false}
+      - ENABLE_OPENAI_API=${ENABLE_OPENAI_API:-false}
+      - ENABLE_DIRECT_CONNECTIONS=${ENABLE_DIRECT_CONNECTIONS:-true}
+      - ENABLE_EMAIL_VERIFICATION=${ENABLE_EMAIL_VERIFICATION:-false}
+      - LOGIN_TERMS_ENABLED=${LOGIN_TERMS_ENABLED:-true}
+      - LOGIN_TERMS_DISPLAY_STYLE=${LOGIN_TERMS_DISPLAY_STYLE:-modal}
+      - LOGIN_TERMS_UPDATED_AT=${LOGIN_TERMS_UPDATED_AT:-2026-03-31}
+      - SMTP_HOST=${SMTP_HOST:-smtpdm.aliyun.com}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USERNAME=${SMTP_USERNAME:-no-reply@mail.qlcodeapi.com}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-no-reply@mail.qlcodeapi.com}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-QLCode API}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-true}
       - CORS_ALLOW_ORIGIN=${CORS_ALLOW_ORIGIN:-https://qlcodeapi.com}
       - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-*}
       - SCARF_NO_ANALYTICS=${SCARF_NO_ANALYTICS:-true}

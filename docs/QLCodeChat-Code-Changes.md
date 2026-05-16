@@ -5,8 +5,8 @@
 当前定制版本：
 
 ```text
-QLCodeChat v0.9.7
-Docker image: qlcode-chat:v0.9.7
+QLCodeChat v0.9.8
+Docker image: qlcode-chat:v0.9.8
 Base branch: main
 Production branch: qlcode-chat-production
 ```
@@ -24,7 +24,7 @@ Production branch: qlcode-chat-production
 
 - `package.json`
   - 包名改为 `qlcode-chat`。
-  - 版本保持为 `0.9.7`，作为 Docker 镜像版本标签来源。
+  - 版本保持为 `0.9.8`，作为 Docker 镜像版本标签来源。
 - `src/lib/constants.ts`
   - 新增并集中维护品牌常量：
     - `APP_NAME = 'QLCodeChat'`
@@ -103,6 +103,9 @@ Production branch: qlcode-chat-production
   - 地址输入改为固定展示。
   - 用户只需要填写 API Key。
   - 在输入密钥位置增加“获取密钥”入口，指向 `https://api.qlcodeapi.com/`。
+  - API Key 输入框增加明显边框、聚焦态高亮和自动聚焦，降低用户找不到输入位置的概率。
+- `src/lib/components/common/SensitiveInput.svelte`
+  - 增加可选 `autofocus` 参数，供 QLCodeAPI 密钥输入框打开时自动聚焦。
 - `src/lib/apis/openai/index.ts`
   - 对 QLCodeAPI 地址做特殊处理：
     - 获取模型时不让浏览器直接跨域访问 QLCodeAPI，而是请求后端代理接口。
@@ -210,7 +213,7 @@ Production branch: qlcode-chat-production
 
 - 替换原登录页为 QLCodeChat 登录页。
 - 保留登录、注册、LDAP、首次管理员创建等原有流程。
-- 右上角增加“获取密钥”链接。
+- 右上角增加“使用教程”链接。
 - 登录/注册表单视觉布局适配桌面和移动端。
 
 主要改动：
@@ -221,11 +224,82 @@ Production branch: qlcode-chat-production
   - 支持登录、注册、LDAP、首次管理员创建流程。
   - 注册状态下避免表单超出屏幕。
   - 密码和确认密码输入支持显示/隐藏。
-  - 增加“获取密钥”链接，指向 `https://api.qlcodeapi.com/`。
+  - 增加“使用教程”链接，默认指向 `https://qlcodeapi.com/`。
+  - 缩小顶部品牌 wordmark，并让品牌和教程入口更靠近页面左右上角。
+  - 登录表单和右侧视觉内容整体上移，减少首屏顶部留白。
+  - 注册页在启用邮箱验证码后显示验证码输入框和发送验证码按钮。
   - 移除毛玻璃式模糊视觉，改为更清晰的实色和层级样式。
 - `static/static/qlcode-login/`
 - `backend/open_webui/static/qlcode-login/`
   - 提供登录页所需 WebP 素材。
+
+### 注册邮箱验证码
+
+目标：
+
+- 支持管理员配置 SMTP，用于发送注册邮箱验证码。
+- 新用户注册时可要求先通过邮箱验证码。
+- 首个管理员创建流程不强制验证码，避免 SMTP 未配置时无法初始化系统。
+- 验证码只保存 HMAC 哈希，并支持 Redis；未配置 Redis 时回退到当前进程内存 TTL。
+
+主要改动：
+
+- `backend/open_webui/config.py`
+  - 新增 `ENABLE_EMAIL_VERIFICATION`、`EMAIL_VERIFICATION_TTL_SECONDS`。
+  - 新增 SMTP 配置：`SMTP_HOST`、`SMTP_PORT`、`SMTP_USERNAME`、`SMTP_PASSWORD`、`SMTP_FROM_EMAIL`、`SMTP_FROM_NAME`、`SMTP_USE_TLS`。
+  - SMTP 默认主机为 `smtpdm.aliyun.com`，默认端口 `465`，默认用户名和发件人为 `no-reply@mail.qlcodeapi.com`，默认发件人名称为 `QLCode API`，默认启用 TLS。
+  - 旧数据库中 SMTP 主机、用户名、发件人邮箱为空时会自动补齐；发件人名称为空或仍为旧默认 `QLCodeChat` 时会自动迁移为 `QLCode API`。
+- `backend/open_webui/utils/email_verification.py`
+  - 新增验证码生成、哈希存储、校验、SMTP 发送和邮件模板渲染能力。
+  - 优先使用 Redis 保存验证码，失败或未配置时使用内存 TTL。
+- `backend/open_webui/models/auths.py`
+  - 注册表单新增 `email_verification_code`。
+- `backend/open_webui/routers/auths.py`
+  - 新增 `POST /api/v1/auths/email/verification/send` 发送注册验证码。
+  - 新增 `POST /api/v1/auths/admin/config/smtp/test` 发送 SMTP 测试邮件。
+  - 注册时在启用邮箱验证码且不是首个用户时校验验证码。
+  - 管理员配置接口支持读取和保存 SMTP 设置；密码返回时不回显明文，留空保存会保留旧值。
+- `backend/open_webui/main.py`
+  - `/api/config` 增加 `features.enable_email_verification`，用于登录页控制验证码字段。
+- `src/lib/apis/auths/index.ts`
+  - 新增发送注册验证码和 SMTP 测试邮件 API。
+- `src/lib/components/admin/Settings/General.svelte`
+  - 通用设置中新增 SMTP 设置、注册邮箱验证码开关、测试连接和发送测试邮件。
+- `src/routes/auth/+page.svelte`
+  - 注册模式下按配置显示邮箱验证码输入框和发送按钮。
+- `Dockerfile`、`docker-compose.yaml`、`docker-compose.prod.yaml`、`.env.example`
+  - 增加邮箱验证码和 SMTP 相关环境变量默认值。
+
+### 登录服务条款确认
+
+目标：
+
+- 登录页可要求用户先阅读并同意服务条款。
+- 管理员可在通用设置中控制启用状态、展示形式、条款更新日期和 Markdown 文档内容。
+- 条款更新日期变化后，登录页会要求用户重新确认。
+
+主要改动：
+
+- `backend/open_webui/config.py`
+  - 新增 `LOGIN_TERMS_ENABLED`、`LOGIN_TERMS_DISPLAY_STYLE`、`LOGIN_TERMS_UPDATED_AT`、`LOGIN_TERMS_DOCUMENTS` 持久配置。
+  - 默认启用条款确认，默认展示形式为弹窗，默认条款更新日期为 `2026-03-31`。
+  - 内置服务条款、使用政策、支持的国家和地区、服务特定条款四份 Markdown 文档。
+- `backend/open_webui/main.py`
+  - `/api/config` 新增 `login_terms`，未登录状态下登录页可读取条款开关、展示形式、更新日期和文档内容。
+- `backend/open_webui/models/auths.py`
+  - 登录、注册、LDAP 登录表单新增 `terms_accepted` 和 `terms_updated_at`。
+- `backend/open_webui/routers/auths.py`
+  - 条款启用后，登录、注册、LDAP 登录会校验用户是否同意当前更新日期对应的条款。
+  - 管理员配置接口支持读取和保存登录条款配置。
+- `src/lib/components/admin/Settings/General.svelte`
+  - 通用设置新增“登录条款确认”面板，支持启用开关、弹窗/复选框模式、更新日期和文档增删编辑。
+- `src/routes/auth/+page.svelte`
+  - 登录页按配置显示条款弹窗或复选框。
+  - 未同意条款时禁用登录入口，并在提交时提示用户先同意条款。
+- `src/routes/legal/[slug]/+page.svelte`
+  - 新增公开条款文档页，用于查看 `/legal/terms`、`/legal/usage-policy` 等 Markdown 文档。
+- `Dockerfile`、`docker-compose.yaml`、`docker-compose.prod.yaml`、`.env.example`
+  - 增加登录条款相关环境变量默认值。
 
 ## 8. 字体、缩放、对比度与界面清晰度
 
@@ -256,6 +330,7 @@ Production branch: qlcode-chat-production
 
   - 放大侧边栏中的 `text-xs`、`text-sm`、`text-base` 和聊天列表项目尺寸。
   - 聊天列表项高度、padding、标题行高跟随侧边栏缩放。
+
 - 多个 Svelte 组件
   - 移除或弱化 blur/backdrop blur 类样式。
   - 调整浅色文本为更高对比度颜色。
@@ -271,7 +346,7 @@ Production branch: qlcode-chat-production
 
 - `src/lib/components/chat/Settings/About.svelte`
   - 文案调整为：
-    - 当前版本：`0.9.7`
+    - 当前版本：`0.9.8`
     - 作者：`晴朗`
     - 联系方式：`qlcodeapi@qq.com`
   - 版本检查相关显示逻辑调整为当前版本口径。
@@ -336,8 +411,49 @@ Production branch: qlcode-chat-production
   - `DEFAULT_USER_ROLE` 默认值从 `pending` 调整为 `user`。
 - `backend/open_webui/routers/auths.py`
   - 普通注册和 LDAP 自动创建用户时，写入角色固定为 `user`。
+  - 首个用户注册成为管理员后，不再自动关闭注册开关。
+- `backend/open_webui/main.py`
+  - 使用环境变量预置管理员时，不再自动关闭注册开关。
 - `backend/open_webui/utils/oauth.py`
   - OAuth 新用户无角色匹配时默认写入 `user`。
+
+### 连接默认值
+
+目标：
+
+- Ollama API 默认关闭，避免新部署自动尝试连接本地 Ollama。
+- 系统级 OpenAI 外部连接默认关闭，避免管理员未配置时暴露无效服务商入口。
+- 直接连接默认打开，保证用户侧 QLCodeAPI 密钥入口可用。
+- 通用设置中的 QLCodeChat URL 默认指向正式访问域名。
+- 通用设置中的管理员邮箱默认使用 `qlcodeapi@qq.com`。
+- 登录页“使用教程”链接默认指向 `https://qlcodeapi.com/`，并允许管理员在通用设置里修改。
+- 首页建议词使用中文默认内容。
+
+主要改动：
+
+- `backend/open_webui/config.py`
+  - `ENABLE_OLLAMA_API` 默认值从 `true` 调整为 `false`。
+  - `ENABLE_OPENAI_API` 默认值从 `true` 调整为 `false`。
+  - `ENABLE_DIRECT_CONNECTIONS` 默认保持为 `true`。
+  - `WEBUI_URL` 默认值改为 `https://chat.qlcodeapi.com/`，旧配置为空时会自动补齐。
+  - 新增 `QLCODE_TUTORIAL_URL` 持久配置，默认值为 `https://qlcodeapi.com/`，旧配置为空时会自动补齐。
+  - `ADMIN_EMAIL` 默认值改为 `qlcodeapi@qq.com`，旧配置为空时会自动补齐。
+  - 默认提示建议改为中文内容；如果旧数据库仍是官方英文默认建议，会自动迁移为 QLCodeChat 中文建议，不覆盖管理员自定义建议。
+- `backend/open_webui/main.py`
+  - `/api/config` 公开返回 `qlcode_tutorial_url`，用于登录页未登录状态读取教程链接。
+- `backend/open_webui/routers/auths.py`
+  - 管理员通用配置接口支持读取和保存 `QLCODE_TUTORIAL_URL`。
+- `src/routes/auth/+page.svelte`
+  - 右上角入口从“获取密钥”改为“使用教程”，链接从 `/api/config` 读取，默认回退到 `https://qlcodeapi.com/`。
+  - 调整登录页纵向间距，让登录区域更接近视觉居中。
+- `src/lib/components/admin/Settings/General.svelte`
+  - 通用设置新增“使用教程 URL”输入项。
+- `src/lib/utils/connections.ts`
+  - 程序化新增/删除系统 OpenAI 连接时，缺省开关保持关闭。
+- `Dockerfile`
+  - 镜像默认环境增加 `WEBUI_URL=https://chat.qlcodeapi.com/`、`QLCODE_TUTORIAL_URL=https://qlcodeapi.com/`、`ADMIN_EMAIL=qlcodeapi@qq.com`、`ENABLE_OLLAMA_API=false`、`ENABLE_OPENAI_API=false`、`ENABLE_DIRECT_CONNECTIONS=true`、`ENABLE_EMAIL_VERIFICATION=false`、登录条款默认项和 SMTP 默认项。
+- `docker-compose.yaml`、`docker-compose.prod.yaml`、`.env.example`
+  - 运行环境默认带上 `WEBUI_URL=https://chat.qlcodeapi.com/`、`QLCODE_TUTORIAL_URL=https://qlcodeapi.com/`、`ADMIN_EMAIL=qlcodeapi@qq.com`、`ENABLE_SIGNUP=true`、`ENABLE_OLLAMA_API=false`、`ENABLE_OPENAI_API=false`、`ENABLE_DIRECT_CONNECTIONS=true`、`ENABLE_EMAIL_VERIFICATION=false`、登录条款默认项和 SMTP 默认项。
 
 ## 11. Docker 构建与运行配置
 
@@ -352,6 +468,8 @@ Production branch: qlcode-chat-production
 
 - `Dockerfile`
   - 移除会额外拉取 build syntax 镜像的声明，减少构建时网络失败点。
+  - 增加构建镜像源参数：APT、npm、PyPI、uv 均可通过 build args 覆盖。
+  - 前端构建默认设置 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip`，避免 `onnxruntime-node` 在非 CUDA 构建中下载 GitHub 上的大体积 CUDA 二进制。
 - `.dockerignore`
   - 忽略 `.venv`、`backend/.venv`、`release` 等本地大目录，避免传入 Docker build context。
 - `docker-compose.yaml`
@@ -359,21 +477,38 @@ Production branch: qlcode-chat-production
   - 镜像默认标签改为：
 
     ```text
-    qlcode-chat:v0.9.7
+    qlcode-chat:v0.9.8
     ```
 
   - 添加构建代理参数，便于本地网络较慢时构建。
+  - 添加 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` 构建参数，提升干净构建稳定性。
   - 默认宿主机端口仍为 `3000`，容器内部监听 `8080`。
+
 - `docker-compose.prod.yaml`
   - 新增服务器部署用 compose。
   - 使用已构建镜像运行，不在服务器上重新 build。
   - 通过 `.env` 控制端口、版本号、密钥、CORS。
 - `.env.example`
   - 新增 QLCodeChat 服务器运行环境变量模板：
-    - `QLCODE_CHAT_DOCKER_TAG=v0.9.7`
+    - `QLCODE_CHAT_DOCKER_TAG=v0.9.8`
     - `QLCODE_CHAT_PORT=3000`
+    - `NPM_CONFIG_REGISTRY=https://registry.npmmirror.com`
+    - `DEBIAN_APT_MIRROR=http://mirrors.aliyun.com/debian`
+    - `DEBIAN_SECURITY_MIRROR=http://mirrors.aliyun.com/debian-security`
+    - `PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple`
+    - `UV_INDEX_URL=https://mirrors.aliyun.com/pypi/simple`
+    - `ONNXRUNTIME_NODE_INSTALL_CUDA=skip`
     - `QLCODE_CHAT_SECRET_KEY`
     - `CORS_ALLOW_ORIGIN`
+    - `WEBUI_URL=https://chat.qlcodeapi.com/`
+    - `QLCODE_TUTORIAL_URL=https://qlcodeapi.com/`
+    - `ADMIN_EMAIL=qlcodeapi@qq.com`
+    - `ENABLE_SIGNUP=true`
+    - `ENABLE_OLLAMA_API=false`
+    - `ENABLE_OPENAI_API=false`
+    - `ENABLE_DIRECT_CONNECTIONS=true`
+    - `ENABLE_EMAIL_VERIFICATION=false`
+    - SMTP 相关默认项
 
 ## 12. 部署包与运维文档
 
@@ -386,21 +521,19 @@ Production branch: qlcode-chat-production
 
 - `docs/QLCodeChat-Usage-Deploy.md`
   - 增加完整部署、更新、反向代理、备份、排错说明。
-- `docs/QLCodeChat-v0.9.5-Server-Package.md`
-  - 增加 v0.9.5 离线部署包说明。
-- `release/qlcode-chat-v0.9.5/`
+- `release/qlcode-chat-v0.9.8/`
   - 本地生成部署包目录，包含：
-    - `qlcode-chat-v0.9.5.tar.gz`
+    - `qlcode-chat-v0.9.8.tar.gz`
     - `docker-compose.yaml`
     - `.env.example`
     - `README-部署说明.md`
     - `SHA256SUMS`
-- `release/qlcode-chat-v0.9.5-release.tar.gz`
+- `release/qlcode-chat-v0.9.8-release.tar.gz`
   - 本地生成总压缩包，便于一次性上传服务器。
 
 ## 13. 验证情况
 
-v0.9.7 已执行过的验证：
+v0.9.8 已执行过的验证：
 
 - `PYTHONPATH=backend .venv/bin/python -m py_compile ...`
   - 本次涉及的后端文件语法检查通过。
@@ -409,8 +542,38 @@ v0.9.7 已执行过的验证：
   - 本次 diff 无空白格式问题。
 - `rg ... Changelog/UpdateInfoToast/showChangelog/showUpdateToast/getVersionUpdates`
   - 前端运行代码中已无更新弹窗、更新 toast、更新日志 API 调用入口；后端仅保留返回空内容/当前版本的兼容接口和旧设置强制关闭逻辑。
-- `npm run build`
-  - 本地执行超过二十分钟后中止；过程中只看到项目既有 Svelte 警告，未得到完整构建结论。
+- 临时数据目录启动配置检查
+  - `WEBUI_URL` 默认返回 `https://chat.qlcodeapi.com/`。
+  - `ENABLE_OLLAMA_API` 默认返回 `False`。
+  - `ENABLE_OPENAI_API` 默认返回 `False`。
+  - `ENABLE_DIRECT_CONNECTIONS` 默认返回 `True`。
+  - `ADMIN_EMAIL` 默认返回 `qlcodeapi@qq.com`。
+  - `QLCODE_TUTORIAL_URL` 默认返回 `https://qlcodeapi.com/`。
+  - `ENABLE_EMAIL_VERIFICATION` 默认返回 `False`。
+  - 登录条款默认返回 `enabled=True`、`display_style=modal`、`updated_at=2026-03-31`，并包含 4 份默认文档。
+  - SMTP 默认返回主机 `smtpdm.aliyun.com`、端口 `465`、用户名 `no-reply@mail.qlcodeapi.com`、发件人 `no-reply@mail.qlcodeapi.com`、发件人名称 `QLCode API`、`SMTP_USE_TLS=True`。
+  - `DEFAULT_PROMPT_SUGGESTIONS` 返回 6 条 QLCodeChat 中文建议。
+- 邮箱验证码辅助函数检查
+  - 验证码长度为 6 位。
+  - 正确验证码可通过校验。
+  - 验证码校验后会被消费，重复校验失败。
+- 本地源码运行检查
+  - 后端 `http://127.0.0.1:8080/health` 返回 `200`。
+  - 前端 `http://192.168.9.106:3000/` 返回 `200`。
+  - 未登录 `/api/config` 返回 `qlcode_tutorial_url=https://qlcodeapi.com/` 和 `features.enable_email_verification=false`。
+  - 未同意条款时登录接口返回 `400` 和“请先阅读并同意服务条款。”。
+  - 携带当前条款确认日期后，登录接口继续进入正常账号密码校验流程。
+  - 未启用邮箱验证码时，发送验证码接口返回 `403` 和“邮箱验证码未启用。”。
+  - 登录后 `/api/config` 返回中文建议和直接连接开启。
+  - 管理员 `/api/v1/auths/admin/config` 返回 `WEBUI_URL=https://chat.qlcodeapi.com/` 和可编辑的 `QLCODE_TUTORIAL_URL`。
+- `docker compose --env-file .env.example build qlcode-chat`
+  - 本地 Docker 镜像 `qlcode-chat:v0.9.8` 构建完成。
+  - 构建过程中使用代理和镜像源下载依赖。
+  - 原 `onnxruntime-node` CUDA 二进制下载卡顿问题已通过 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip` 固化处理。
+- 临时 Docker 容器验证
+  - 镜像 `qlcode-chat:v0.9.8` 启动成功。
+  - `/health` 返回 `{"status":true}`。
+  - `/api/config` 返回 `name=QLCodeChat`、`version=0.9.8`、`features.enable_signup=true`、`features.enable_version_update_check=false`、服务条款配置存在。
 - `npx eslint ...`
   - 未通过，原因是 `src/lib/apis/index.ts`、`src/lib/stores/index.ts`、部分 Svelte 组件内已有多处 `any`、a11y 和未使用 CSS 选择器等历史 lint 问题；本次变更未留下更新弹窗相关的未使用导入。
 

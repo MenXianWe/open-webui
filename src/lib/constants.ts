@@ -5,6 +5,7 @@ export const APP_NAME = 'QLCodeChat';
 export const CHAT_ASSISTANT_DISPLAY_NAME = 'QL';
 export const QLCODE_API_BASE_URL = 'https://api.qlcodeapi.com/v1';
 export const QLCODE_API_PORTAL_URL = 'https://api.qlcodeapi.com/';
+export const QLCODE_TUTORIAL_URL = 'https://qlcodeapi.com/';
 export const QLCODE_VISIBLE_CHAT_MODEL_IDS = ['gpt-5.5', 'gpt-5.4'];
 
 export const WEBUI_HOSTNAME = browser ? (dev ? `${location.hostname}:8080` : ``) : '';

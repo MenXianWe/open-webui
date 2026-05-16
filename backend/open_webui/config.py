@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import base64
@@ -1019,7 +1020,7 @@ ENABLE_DIRECT_CONNECTIONS = PersistentConfig(
 ENABLE_OLLAMA_API = PersistentConfig(
     'ENABLE_OLLAMA_API',
     'ollama.enable',
-    os.environ.get('ENABLE_OLLAMA_API', 'True').lower() == 'true',
+    os.environ.get('ENABLE_OLLAMA_API', 'False').lower() == 'true',
 )
 
 OLLAMA_API_BASE_URL = os.environ.get('OLLAMA_API_BASE_URL', 'http://localhost:11434/api')
@@ -1099,7 +1100,7 @@ OLLAMA_API_CONFIGS = PersistentConfig(
 ENABLE_OPENAI_API = PersistentConfig(
     'ENABLE_OPENAI_API',
     'openai.enable',
-    os.environ.get('ENABLE_OPENAI_API', 'True').lower() == 'true',
+    os.environ.get('ENABLE_OPENAI_API', 'False').lower() == 'true',
 )
 
 
@@ -1201,7 +1202,27 @@ except Exception:
 ####################################
 
 
-WEBUI_URL = PersistentConfig('WEBUI_URL', 'webui.url', os.environ.get('WEBUI_URL', ''))
+QLCODE_CHAT_DEFAULT_WEBUI_URL = 'https://chat.qlcodeapi.com/'
+QLCODE_CHAT_DEFAULT_TUTORIAL_URL = 'https://qlcodeapi.com/'
+
+WEBUI_URL = PersistentConfig('WEBUI_URL', 'webui.url', os.environ.get('WEBUI_URL', QLCODE_CHAT_DEFAULT_WEBUI_URL))
+
+if not str(WEBUI_URL.value or '').strip():
+    WEBUI_URL.value = QLCODE_CHAT_DEFAULT_WEBUI_URL
+    if ENABLE_PERSISTENT_CONFIG:
+        WEBUI_URL.save()
+
+
+QLCODE_TUTORIAL_URL = PersistentConfig(
+    'QLCODE_TUTORIAL_URL',
+    'ui.qlcode_tutorial_url',
+    os.environ.get('QLCODE_TUTORIAL_URL', QLCODE_CHAT_DEFAULT_TUTORIAL_URL),
+)
+
+if not str(QLCODE_TUTORIAL_URL.value or '').strip():
+    QLCODE_TUTORIAL_URL.value = QLCODE_CHAT_DEFAULT_TUTORIAL_URL
+    if ENABLE_PERSISTENT_CONFIG:
+        QLCODE_TUTORIAL_URL.save()
 
 
 ENABLE_SIGNUP = PersistentConfig(
@@ -1243,42 +1264,77 @@ try:
 except Exception as e:
     log.exception(f'Error loading DEFAULT_PROMPT_SUGGESTIONS: {e}')
     default_prompt_suggestions = []
+
+UPSTREAM_DEFAULT_PROMPT_SUGGESTIONS = [
+    {
+        'title': ['Help me study', 'vocabulary for a college entrance exam'],
+        'content': "Help me study vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option.",
+    },
+    {
+        'title': ['Give me ideas', "for what to do with my kids' art"],
+        'content': "What are 5 creative things I could do with my kids' art? I don't want to throw them away, but it's also so much clutter.",
+    },
+    {
+        'title': ['Tell me a fun fact', 'about the Roman Empire'],
+        'content': 'Tell me a random fun fact about the Roman Empire',
+    },
+    {
+        'title': ['Show me a code snippet', "of a website's sticky header"],
+        'content': "Show me a code snippet of a website's sticky header in CSS and JavaScript.",
+    },
+    {
+        'title': [
+            'Explain options trading',
+            "if I'm familiar with buying and selling stocks",
+        ],
+        'content': "Explain options trading in simple terms if I'm familiar with buying and selling stocks.",
+    },
+    {
+        'title': ['Overcome procrastination', 'give me tips'],
+        'content': 'Could you start by asking me about instances when I procrastinate the most and then give me some suggestions to overcome it?',
+    },
+]
+
+QLCODE_DEFAULT_PROMPT_SUGGESTIONS = [
+    {
+        'title': ['帮我梳理思路', '把一个复杂问题拆成步骤'],
+        'content': '请帮我把这个问题拆成清晰的步骤，并指出每一步需要准备什么信息。',
+    },
+    {
+        'title': ['写一段代码', '实现常见业务功能'],
+        'content': '请用清晰、可维护的方式写一段示例代码，并解释关键设计取舍。',
+    },
+    {
+        'title': ['解释一个概念', '用通俗但准确的方式说明'],
+        'content': '请用通俗但准确的方式解释这个概念，并给出一个实际例子。',
+    },
+    {
+        'title': ['优化一段文案', '让表达更清楚专业'],
+        'content': '请帮我优化这段文案，让它更清楚、更专业，并保留原本的意思。',
+    },
+    {
+        'title': ['制定学习计划', '根据目标安排步骤'],
+        'content': '请根据我的目标制定一个可执行的学习计划，包含阶段安排、练习方式和检查标准。',
+    },
+    {
+        'title': ['分析一个方案', '指出风险和改进点'],
+        'content': '请帮我分析这个方案的优点、风险和可以改进的地方，并给出优先级建议。',
+    },
+]
+
 if default_prompt_suggestions == []:
-    default_prompt_suggestions = [
-        {
-            'title': ['Help me study', 'vocabulary for a college entrance exam'],
-            'content': "Help me study vocabulary: write a sentence for me to fill in the blank, and I'll try to pick the correct option.",
-        },
-        {
-            'title': ['Give me ideas', "for what to do with my kids' art"],
-            'content': "What are 5 creative things I could do with my kids' art? I don't want to throw them away, but it's also so much clutter.",
-        },
-        {
-            'title': ['Tell me a fun fact', 'about the Roman Empire'],
-            'content': 'Tell me a random fun fact about the Roman Empire',
-        },
-        {
-            'title': ['Show me a code snippet', "of a website's sticky header"],
-            'content': "Show me a code snippet of a website's sticky header in CSS and JavaScript.",
-        },
-        {
-            'title': [
-                'Explain options trading',
-                "if I'm familiar with buying and selling stocks",
-            ],
-            'content': "Explain options trading in simple terms if I'm familiar with buying and selling stocks.",
-        },
-        {
-            'title': ['Overcome procrastination', 'give me tips'],
-            'content': 'Could you start by asking me about instances when I procrastinate the most and then give me some suggestions to overcome it?',
-        },
-    ]
+    default_prompt_suggestions = QLCODE_DEFAULT_PROMPT_SUGGESTIONS
 
 DEFAULT_PROMPT_SUGGESTIONS = PersistentConfig(
     'DEFAULT_PROMPT_SUGGESTIONS',
     'ui.prompt_suggestions',
     default_prompt_suggestions,
 )
+
+if DEFAULT_PROMPT_SUGGESTIONS.value == UPSTREAM_DEFAULT_PROMPT_SUGGESTIONS:
+    DEFAULT_PROMPT_SUGGESTIONS.value = QLCODE_DEFAULT_PROMPT_SUGGESTIONS
+    if ENABLE_PERSISTENT_CONFIG:
+        DEFAULT_PROMPT_SUGGESTIONS.save()
 
 MODEL_ORDER_LIST = PersistentConfig(
     'MODEL_ORDER_LIST',
@@ -1792,6 +1848,183 @@ except Exception as e:
 WEBUI_BANNERS = PersistentConfig('WEBUI_BANNERS', 'ui.banners', banners)
 
 
+class LoginTermsDocumentModel(BaseModel):
+    id: str
+    title: str
+    slug: str
+    content: str
+
+
+QLCODE_DEFAULT_LOGIN_TERMS_DOCUMENTS = [
+    {
+        'id': 'terms',
+        'title': '服务条款',
+        'slug': 'terms',
+        'content': """# QLCode API 服务条款
+
+欢迎使用 QLCode API。使用本服务前，请仔细阅读并同意本服务条款。
+
+## 1. 服务内容
+
+QLCode API 提供 AI API 接入、API Key 管理、用量统计、余额计费、模型调用和相关技术服务。
+
+## 2. 账号与密钥
+
+用户应妥善保管账号、密码和 API Key。因用户主动泄露、共享或保管不当造成的损失，由用户自行承担。
+
+## 3. 费用与用量
+
+服务可能按照模型、调用量、上下文长度、图片生成、工具调用或其他计费维度产生费用。具体价格、余额和账单以平台展示为准。
+
+## 4. 服务调整
+
+平台可能根据运营、安全、上游政策或合规要求调整服务能力、模型范围、调用限制和计费规则。""",
+    },
+    {
+        'id': 'usage-policy',
+        'title': '使用政策',
+        'slug': 'usage-policy',
+        'content': """# QLCode API 使用政策
+
+使用 QLCode API 时，用户应遵守适用法律法规、平台规则以及上游模型服务要求。
+
+## 1. 禁止用途
+
+不得将本服务用于违法违规、欺诈、侵权、垃圾信息、恶意代码、攻击绕过、安全滥用或其他损害他人权益的场景。
+
+## 2. 内容责任
+
+用户应对输入内容、生成内容、接口调用行为以及后续使用结果负责。平台可根据安全和合规要求限制、暂停或终止异常调用。
+
+## 3. 安全使用
+
+用户不得共享、倒卖、公开泄露 API Key，不得通过自动化方式恶意消耗资源或规避平台限制。""",
+    },
+    {
+        'id': 'supported-regions',
+        'title': '支持的国家和地区',
+        'slug': 'supported-regions',
+        'content': """# QLCode API 支持的国家和地区
+
+QLCode API 的可用范围可能受用户所在地、网络环境、上游服务政策和适用法律法规影响。
+
+## 1. 用户责任
+
+用户有责任确认其使用本服务的行为符合所在地法律法规。因用户所在地政策、网络限制或法律风险造成的影响，由用户自行承担。
+
+## 2. 服务调整
+
+平台可能根据法律法规、上游政策或运营要求，调整支持的国家和地区范围。""",
+    },
+    {
+        'id': 'service-specific-terms',
+        'title': '服务特定条款',
+        'slug': 'service-specific-terms',
+        'content': """# QLCode API 服务特定条款
+
+本条款适用于 QLCode API 提供的 AI API 接入、模型调用、计费和相关服务。
+
+## 1. 模型服务
+
+不同模型可能存在能力、价格、速率限制、上下文长度和可用状态差异。实际可用模型以平台当前展示和接口返回为准。
+
+## 2. 图片生成
+
+图片生成能力可能受到模型可用性、内容安全策略、账户余额和调用限制影响。未配置可用图片模型时，系统会提示用户检查模型权限。
+
+## 3. 上游依赖
+
+部分服务依赖上游模型或基础设施。因上游调整、故障、维护或政策变化导致的服务变化，平台会尽量保持通知和兼容处理。""",
+    },
+]
+
+
+def _parse_login_terms_documents_env():
+    try:
+        documents = json.loads(os.environ.get('LOGIN_TERMS_DOCUMENTS', 'null'))
+        if isinstance(documents, list):
+            return documents
+    except Exception as e:
+        log.exception(f'Error loading LOGIN_TERMS_DOCUMENTS: {e}')
+    return QLCODE_DEFAULT_LOGIN_TERMS_DOCUMENTS
+
+
+def _normalize_login_terms_slug(value: str) -> str:
+    slug = re.sub(r'[^a-z0-9-]+', '-', str(value or '').strip().lower()).strip('-')
+    return slug or 'terms'
+
+
+def normalize_login_terms_documents(documents) -> list[dict]:
+    if not isinstance(documents, list) or not documents:
+        documents = QLCODE_DEFAULT_LOGIN_TERMS_DOCUMENTS
+
+    normalized = []
+    used_slugs = set()
+
+    for index, document in enumerate(documents[:20]):
+        if hasattr(document, 'model_dump'):
+            document = document.model_dump()
+        if not isinstance(document, dict):
+            continue
+
+        title = str(document.get('title') or '').strip() or f'文档 {index + 1}'
+        slug = _normalize_login_terms_slug(document.get('slug') or title)
+        if slug in used_slugs:
+            slug = f'{slug}-{index + 1}'
+        used_slugs.add(slug)
+
+        content = str(document.get('content') or '').strip()
+        if not content:
+            content = f'# {title}\n\n请在管理员后台完善此文档内容。'
+
+        normalized.append(
+            {
+                'id': str(document.get('id') or slug).strip() or slug,
+                'title': title,
+                'slug': slug,
+                'content': content,
+            }
+        )
+
+    return normalized or QLCODE_DEFAULT_LOGIN_TERMS_DOCUMENTS
+
+
+LOGIN_TERMS_ENABLED = PersistentConfig(
+    'LOGIN_TERMS_ENABLED',
+    'ui.login_terms.enabled',
+    os.environ.get('LOGIN_TERMS_ENABLED', 'True').lower() == 'true',
+)
+
+LOGIN_TERMS_DISPLAY_STYLE = PersistentConfig(
+    'LOGIN_TERMS_DISPLAY_STYLE',
+    'ui.login_terms.display_style',
+    os.environ.get('LOGIN_TERMS_DISPLAY_STYLE', 'modal'),
+)
+
+if LOGIN_TERMS_DISPLAY_STYLE.value not in {'modal', 'checkbox'}:
+    LOGIN_TERMS_DISPLAY_STYLE.value = 'modal'
+    if ENABLE_PERSISTENT_CONFIG:
+        LOGIN_TERMS_DISPLAY_STYLE.save()
+
+LOGIN_TERMS_UPDATED_AT = PersistentConfig(
+    'LOGIN_TERMS_UPDATED_AT',
+    'ui.login_terms.updated_at',
+    os.environ.get('LOGIN_TERMS_UPDATED_AT', '2026-03-31'),
+)
+
+LOGIN_TERMS_DOCUMENTS = PersistentConfig(
+    'LOGIN_TERMS_DOCUMENTS',
+    'ui.login_terms.documents',
+    _parse_login_terms_documents_env(),
+)
+
+_normalized_login_terms_documents = normalize_login_terms_documents(LOGIN_TERMS_DOCUMENTS.value)
+if LOGIN_TERMS_DOCUMENTS.value != _normalized_login_terms_documents:
+    LOGIN_TERMS_DOCUMENTS.value = _normalized_login_terms_documents
+    if ENABLE_PERSISTENT_CONFIG:
+        LOGIN_TERMS_DOCUMENTS.save()
+
+
 SHOW_ADMIN_DETAILS = PersistentConfig(
     'SHOW_ADMIN_DETAILS',
     'auth.admin.show',
@@ -1801,8 +2034,89 @@ SHOW_ADMIN_DETAILS = PersistentConfig(
 ADMIN_EMAIL = PersistentConfig(
     'ADMIN_EMAIL',
     'auth.admin.email',
-    os.environ.get('ADMIN_EMAIL', None),
+    os.environ.get('ADMIN_EMAIL', 'qlcodeapi@qq.com'),
 )
+
+if ADMIN_EMAIL.value is None or not str(ADMIN_EMAIL.value).strip():
+    ADMIN_EMAIL.value = 'qlcodeapi@qq.com'
+    if ENABLE_PERSISTENT_CONFIG:
+        ADMIN_EMAIL.save()
+
+
+ENABLE_EMAIL_VERIFICATION = PersistentConfig(
+    'ENABLE_EMAIL_VERIFICATION',
+    'auth.email_verification.enable',
+    os.environ.get('ENABLE_EMAIL_VERIFICATION', 'False').lower() == 'true',
+)
+
+EMAIL_VERIFICATION_TTL_SECONDS = PersistentConfig(
+    'EMAIL_VERIFICATION_TTL_SECONDS',
+    'auth.email_verification.ttl_seconds',
+    int(os.environ.get('EMAIL_VERIFICATION_TTL_SECONDS', '600')),
+)
+
+QLCODE_DEFAULT_SMTP_HOST = 'smtpdm.aliyun.com'
+QLCODE_DEFAULT_SMTP_PORT = 465
+QLCODE_DEFAULT_SMTP_USERNAME = 'no-reply@mail.qlcodeapi.com'
+QLCODE_DEFAULT_SMTP_FROM_EMAIL = 'no-reply@mail.qlcodeapi.com'
+QLCODE_DEFAULT_SMTP_FROM_NAME = 'QLCode API'
+
+SMTP_HOST = PersistentConfig(
+    'SMTP_HOST',
+    'email.smtp.host',
+    os.environ.get('SMTP_HOST', QLCODE_DEFAULT_SMTP_HOST),
+)
+
+SMTP_PORT = PersistentConfig(
+    'SMTP_PORT',
+    'email.smtp.port',
+    int(os.environ.get('SMTP_PORT', str(QLCODE_DEFAULT_SMTP_PORT))),
+)
+
+SMTP_USERNAME = PersistentConfig(
+    'SMTP_USERNAME',
+    'email.smtp.username',
+    os.environ.get('SMTP_USERNAME', QLCODE_DEFAULT_SMTP_USERNAME),
+)
+
+SMTP_PASSWORD = PersistentConfig(
+    'SMTP_PASSWORD',
+    'email.smtp.password',
+    os.environ.get('SMTP_PASSWORD', ''),
+)
+
+SMTP_FROM_EMAIL = PersistentConfig(
+    'SMTP_FROM_EMAIL',
+    'email.smtp.from_email',
+    os.environ.get('SMTP_FROM_EMAIL', QLCODE_DEFAULT_SMTP_FROM_EMAIL),
+)
+
+SMTP_FROM_NAME = PersistentConfig(
+    'SMTP_FROM_NAME',
+    'email.smtp.from_name',
+    os.environ.get('SMTP_FROM_NAME', QLCODE_DEFAULT_SMTP_FROM_NAME),
+)
+
+SMTP_USE_TLS = PersistentConfig(
+    'SMTP_USE_TLS',
+    'email.smtp.use_tls',
+    os.environ.get('SMTP_USE_TLS', 'True').lower() == 'true',
+)
+
+for _smtp_config, _smtp_default in [
+    (SMTP_HOST, QLCODE_DEFAULT_SMTP_HOST),
+    (SMTP_USERNAME, QLCODE_DEFAULT_SMTP_USERNAME),
+    (SMTP_FROM_EMAIL, QLCODE_DEFAULT_SMTP_FROM_EMAIL),
+]:
+    if not str(_smtp_config.value or '').strip():
+        _smtp_config.value = _smtp_default
+        if ENABLE_PERSISTENT_CONFIG:
+            _smtp_config.save()
+
+if not str(SMTP_FROM_NAME.value or '').strip() or SMTP_FROM_NAME.value == 'QLCodeChat':
+    SMTP_FROM_NAME.value = QLCODE_DEFAULT_SMTP_FROM_NAME
+    if ENABLE_PERSISTENT_CONFIG:
+        SMTP_FROM_NAME.save()
 
 
 ####################################

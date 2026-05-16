@@ -82,6 +82,36 @@ export const updateAdminConfig = async (token: string, body: object) => {
 	return res;
 };
 
+export const testSmtpEmail = async (token: string, recipient_email: string) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/admin/config/smtp/test`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`
+		},
+		body: JSON.stringify({
+			recipient_email
+		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			error = err.detail;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
 export const getSessionUser = async (token: string) => {
 	let error = null;
 
@@ -110,7 +140,12 @@ export const getSessionUser = async (token: string) => {
 	return res;
 };
 
-export const ldapUserSignIn = async (user: string, password: string) => {
+export const ldapUserSignIn = async (
+	user: string,
+	password: string,
+	termsAccepted: boolean = false,
+	termsUpdatedAt: string = ''
+) => {
 	let error = null;
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/ldap`, {
@@ -121,7 +156,9 @@ export const ldapUserSignIn = async (user: string, password: string) => {
 		credentials: 'include',
 		body: JSON.stringify({
 			user: user,
-			password: password
+			password: password,
+			terms_accepted: termsAccepted,
+			terms_updated_at: termsUpdatedAt
 		})
 	})
 		.then(async (res) => {
@@ -254,7 +291,12 @@ export const updateLdapServer = async (token: string = '', body: object) => {
 	return res;
 };
 
-export const userSignIn = async (email: string, password: string) => {
+export const userSignIn = async (
+	email: string,
+	password: string,
+	termsAccepted: boolean = false,
+	termsUpdatedAt: string = ''
+) => {
 	let error = null;
 
 	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/signin`, {
@@ -265,7 +307,9 @@ export const userSignIn = async (email: string, password: string) => {
 		credentials: 'include',
 		body: JSON.stringify({
 			email: email,
-			password: password
+			password: password,
+			terms_accepted: termsAccepted,
+			terms_updated_at: termsUpdatedAt
 		})
 	})
 		.then(async (res) => {
@@ -290,7 +334,10 @@ export const userSignUp = async (
 	name: string,
 	email: string,
 	password: string,
-	profile_image_url: string
+	profile_image_url: string,
+	email_verification_code: string | null = null,
+	termsAccepted: boolean = false,
+	termsUpdatedAt: string = ''
 ) => {
 	let error = null;
 
@@ -304,7 +351,39 @@ export const userSignUp = async (
 			name: name,
 			email: email,
 			password: password,
-			profile_image_url: profile_image_url
+			profile_image_url: profile_image_url,
+			email_verification_code,
+			terms_accepted: termsAccepted,
+			terms_updated_at: termsUpdatedAt
+		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			error = err.detail;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const sendSignupEmailVerificationCode = async (email: string) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/email/verification/send`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify({
+			email
 		})
 	})
 		.then(async (res) => {

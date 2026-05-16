@@ -270,11 +270,25 @@ type Document = {
 	title: string;
 };
 
+type LoginTermsDocument = {
+	id: string;
+	title: string;
+	slug: string;
+	content: string;
+};
+
 type Config = {
 	status: boolean;
 	name: string;
 	version: string;
 	default_locale: string;
+	qlcode_tutorial_url?: string;
+	login_terms?: {
+		enabled: boolean;
+		display_style: 'modal' | 'checkbox';
+		updated_at: string;
+		documents: LoginTermsDocument[];
+	};
 	default_models: string;
 	default_prompt_suggestions: PromptSuggestion[];
 	features: {
@@ -283,6 +297,7 @@ type Config = {
 		enable_api_keys: boolean;
 		enable_signup: boolean;
 		enable_login_form: boolean;
+		enable_email_verification?: boolean;
 		enable_web_search?: boolean;
 		enable_google_drive_integration: boolean;
 		enable_onedrive_integration: boolean;

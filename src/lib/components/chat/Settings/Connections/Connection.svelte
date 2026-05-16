@@ -54,6 +54,10 @@
 			id="qlcode-api-key"
 			bind:value={key}
 			screenReader={false}
+			autofocus={true}
+			outerClassName="flex flex-1 items-center rounded-xl border-2 border-blue-600 bg-blue-50/60 px-3 py-2 shadow-sm transition focus-within:border-blue-800 focus-within:bg-white focus-within:shadow-[0_0_0_4px_rgba(37,99,235,0.18)] dark:border-blue-400 dark:bg-blue-950/30 dark:focus-within:border-blue-200 dark:focus-within:bg-gray-950"
+			inputClassName="w-full min-h-9 bg-transparent text-base font-semibold text-gray-950 placeholder:text-gray-500 dark:text-gray-50 dark:placeholder:text-gray-400"
+			showButtonClassName="ml-2 rounded-lg p-2 text-gray-800 transition hover:bg-blue-100 hover:text-blue-900 dark:text-gray-100 dark:hover:bg-blue-900/50 dark:hover:text-white"
 			placeholder={$i18n.t('API Key')}
 			required={false}
 			on:change={() => {

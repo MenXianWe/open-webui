@@ -460,6 +460,21 @@ from open_webui.config import (
     DEFAULT_LOCALE,
     OAUTH_PROVIDERS,
     WEBUI_URL,
+    QLCODE_TUTORIAL_URL,
+    LOGIN_TERMS_ENABLED,
+    LOGIN_TERMS_DISPLAY_STYLE,
+    LOGIN_TERMS_UPDATED_AT,
+    LOGIN_TERMS_DOCUMENTS,
+    normalize_login_terms_documents,
+    ENABLE_EMAIL_VERIFICATION,
+    EMAIL_VERIFICATION_TTL_SECONDS,
+    SMTP_HOST,
+    SMTP_PORT,
+    SMTP_USERNAME,
+    SMTP_PASSWORD,
+    SMTP_FROM_EMAIL,
+    SMTP_FROM_NAME,
+    SMTP_USE_TLS,
     RESPONSE_WATERMARK,
     IFRAME_CSP,
     # Admin
@@ -641,9 +656,7 @@ async def lifespan(app: FastAPI):
 
     # Create admin account from env vars if specified and no users exist
     if WEBUI_ADMIN_EMAIL and WEBUI_ADMIN_PASSWORD:
-        if await create_admin_user(WEBUI_ADMIN_EMAIL, WEBUI_ADMIN_PASSWORD, WEBUI_ADMIN_NAME):
-            # Disable signup since we now have an admin
-            app.state.config.ENABLE_SIGNUP = False
+        await create_admin_user(WEBUI_ADMIN_EMAIL, WEBUI_ADMIN_PASSWORD, WEBUI_ADMIN_NAME)
 
     if SAFE_MODE:
         await Functions.deactivate_all_functions()
@@ -863,6 +876,11 @@ app.state.BASE_MODELS = []
 ########################################
 
 app.state.config.WEBUI_URL = WEBUI_URL
+app.state.config.QLCODE_TUTORIAL_URL = QLCODE_TUTORIAL_URL
+app.state.config.LOGIN_TERMS_ENABLED = LOGIN_TERMS_ENABLED
+app.state.config.LOGIN_TERMS_DISPLAY_STYLE = LOGIN_TERMS_DISPLAY_STYLE
+app.state.config.LOGIN_TERMS_UPDATED_AT = LOGIN_TERMS_UPDATED_AT
+app.state.config.LOGIN_TERMS_DOCUMENTS = LOGIN_TERMS_DOCUMENTS
 app.state.config.ENABLE_SIGNUP = ENABLE_SIGNUP
 app.state.config.ENABLE_LOGIN_FORM = ENABLE_LOGIN_FORM
 app.state.config.ENABLE_PASSWORD_CHANGE_FORM = ENABLE_PASSWORD_CHANGE_FORM
@@ -875,6 +893,15 @@ app.state.config.JWT_EXPIRES_IN = JWT_EXPIRES_IN
 
 app.state.config.SHOW_ADMIN_DETAILS = SHOW_ADMIN_DETAILS
 app.state.config.ADMIN_EMAIL = ADMIN_EMAIL
+app.state.config.ENABLE_EMAIL_VERIFICATION = ENABLE_EMAIL_VERIFICATION
+app.state.config.EMAIL_VERIFICATION_TTL_SECONDS = EMAIL_VERIFICATION_TTL_SECONDS
+app.state.config.SMTP_HOST = SMTP_HOST
+app.state.config.SMTP_PORT = SMTP_PORT
+app.state.config.SMTP_USERNAME = SMTP_USERNAME
+app.state.config.SMTP_PASSWORD = SMTP_PASSWORD
+app.state.config.SMTP_FROM_EMAIL = SMTP_FROM_EMAIL
+app.state.config.SMTP_FROM_NAME = SMTP_FROM_NAME
+app.state.config.SMTP_USE_TLS = SMTP_USE_TLS
 
 
 app.state.config.DEFAULT_MODELS = DEFAULT_MODELS
@@ -2341,6 +2368,13 @@ async def get_app_config(request: Request):
         'name': app.state.WEBUI_NAME,
         'version': VERSION,
         'default_locale': str(DEFAULT_LOCALE),
+        'qlcode_tutorial_url': app.state.config.QLCODE_TUTORIAL_URL,
+        'login_terms': {
+            'enabled': app.state.config.LOGIN_TERMS_ENABLED,
+            'display_style': app.state.config.LOGIN_TERMS_DISPLAY_STYLE,
+            'updated_at': app.state.config.LOGIN_TERMS_UPDATED_AT,
+            'documents': normalize_login_terms_documents(app.state.config.LOGIN_TERMS_DOCUMENTS),
+        },
         'oauth': {'providers': {name: config.get('name', name) for name, config in OAUTH_PROVIDERS.items()}},
         'features': {
             'auth': WEBUI_AUTH,
@@ -2350,6 +2384,7 @@ async def get_app_config(request: Request):
             'enable_api_keys': app.state.config.ENABLE_API_KEYS,
             'enable_signup': app.state.config.ENABLE_SIGNUP,
             'enable_login_form': app.state.config.ENABLE_LOGIN_FORM,
+            'enable_email_verification': app.state.config.ENABLE_EMAIL_VERIFICATION,
             'enable_password_change_form': app.state.config.ENABLE_PASSWORD_CHANGE_FORM,
             'enable_websocket': ENABLE_WEBSOCKET_SUPPORT,
             'enable_version_update_check': ENABLE_VERSION_UPDATE_CHECK,

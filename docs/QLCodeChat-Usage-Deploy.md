@@ -70,12 +70,14 @@ docker compose build qlcode-chat
 ```bash
 HTTP_PROXY=http://127.0.0.1:8890 \
 HTTPS_PROXY=http://127.0.0.1:8890 \
-ALL_PROXY=socks5://127.0.0.1:8891 \
+ALL_PROXY=http://127.0.0.1:8890 \
 NO_PROXY=localhost,127.0.0.1,::1,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12 \
 docker compose build qlcode-chat
 ```
 
 这个代理只用于本机开发构建。美国 VPS 通常不要配置这个代理，也不要把 `127.0.0.1:8890` 复制到服务器。
+
+构建阶段默认使用国内镜像源，并设置 `ONNXRUNTIME_NODE_INSTALL_CUDA=skip`，避免前端依赖安装时下载不需要的 ONNX Runtime CUDA 大文件。
 
 构建完成后检查镜像：
 
@@ -90,13 +92,13 @@ docker images qlcode-chat
 本机打包镜像：
 
 ```bash
-docker save qlcode-chat:v0.9.7 | gzip > qlcode-chat-v0.9.7.tar.gz
+docker save qlcode-chat:v0.9.8 | gzip > qlcode-chat-v0.9.8.tar.gz
 ```
 
 上传到服务器：
 
 ```bash
-scp qlcode-chat-v0.9.7.tar.gz docker-compose.prod.yaml .env.example root@你的服务器IP:/opt/
+scp qlcode-chat-v0.9.8.tar.gz docker-compose.prod.yaml .env.example root@你的服务器IP:/opt/
 ```
 
 服务器上准备目录：
@@ -104,7 +106,7 @@ scp qlcode-chat-v0.9.7.tar.gz docker-compose.prod.yaml .env.example root@你的�
 ```bash
 ssh root@你的服务器IP
 mkdir -p /opt/qlcode-chat
-mv /opt/qlcode-chat-v0.9.7.tar.gz /opt/qlcode-chat/
+mv /opt/qlcode-chat-v0.9.8.tar.gz /opt/qlcode-chat/
 mv /opt/docker-compose.prod.yaml /opt/qlcode-chat/docker-compose.yaml
 mv /opt/.env.example /opt/qlcode-chat/.env
 cd /opt/qlcode-chat
@@ -113,7 +115,7 @@ cd /opt/qlcode-chat
 服务器加载镜像：
 
 ```bash
-docker load < qlcode-chat-v0.9.7.tar.gz
+docker load < qlcode-chat-v0.9.8.tar.gz
 ```
 
 生成正式密钥并写入 `.env`：
@@ -127,9 +129,27 @@ nano .env
 
 ```env
 QLCODE_CHAT_SECRET_KEY=替换成上一步生成的长随机值
-QLCODE_CHAT_DOCKER_TAG=v0.9.7
+QLCODE_CHAT_DOCKER_TAG=v0.9.8
 QLCODE_CHAT_PORT=3000
 CORS_ALLOW_ORIGIN=https://你的正式域名
+WEBUI_URL=https://chat.qlcodeapi.com/
+QLCODE_TUTORIAL_URL=https://qlcodeapi.com/
+ADMIN_EMAIL=qlcodeapi@qq.com
+ENABLE_SIGNUP=true
+ENABLE_OLLAMA_API=false
+ENABLE_OPENAI_API=false
+ENABLE_DIRECT_CONNECTIONS=true
+ENABLE_EMAIL_VERIFICATION=false
+LOGIN_TERMS_ENABLED=true
+LOGIN_TERMS_DISPLAY_STYLE=modal
+LOGIN_TERMS_UPDATED_AT=2026-03-31
+SMTP_HOST=smtpdm.aliyun.com
+SMTP_PORT=465
+SMTP_USERNAME=no-reply@mail.qlcodeapi.com
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=no-reply@mail.qlcodeapi.com
+SMTP_FROM_NAME=QLCode API
+SMTP_USE_TLS=true
 ```
 
 启动：
@@ -179,19 +199,19 @@ CORS_ALLOW_ORIGIN=https://chat.example.com
 本机重新构建：
 
 ```bash
-QLCODE_CHAT_DOCKER_TAG=v0.9.7 docker compose build qlcode-chat
-docker save qlcode-chat:v0.9.7 | gzip > qlcode-chat-v0.9.7.tar.gz
+QLCODE_CHAT_DOCKER_TAG=v0.9.8 docker compose build qlcode-chat
+docker save qlcode-chat:v0.9.8 | gzip > qlcode-chat-v0.9.8.tar.gz
 ```
 
 上传并替换服务器镜像：
 
 ```bash
-scp qlcode-chat-v0.9.7.tar.gz root@你的服务器IP:/opt/qlcode-chat/
+scp qlcode-chat-v0.9.8.tar.gz root@你的服务器IP:/opt/qlcode-chat/
 ssh root@你的服务器IP
 cd /opt/qlcode-chat
 docker compose down
-docker load < qlcode-chat-v0.9.7.tar.gz
-sed -i 's/^QLCODE_CHAT_DOCKER_TAG=.*/QLCODE_CHAT_DOCKER_TAG=v0.9.7/' .env
+docker load < qlcode-chat-v0.9.8.tar.gz
+sed -i 's/^QLCODE_CHAT_DOCKER_TAG=.*/QLCODE_CHAT_DOCKER_TAG=v0.9.8/' .env
 docker compose up -d
 ```
 
@@ -305,7 +325,7 @@ curl -i http://127.0.0.1:3000/health
 只要返回下面内容就说明服务正常：
 
 ```json
-{"status":true}
+{ "status": true }
 ```
 
 ### 用户没有模型可用

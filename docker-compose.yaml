@@ -11,11 +11,17 @@ services:
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         ALL_PROXY: ${ALL_PROXY:-}
         NO_PROXY: ${NO_PROXY:-localhost,127.0.0.1}
+        NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
+        DEBIAN_APT_MIRROR: ${DEBIAN_APT_MIRROR:-http://mirrors.aliyun.com/debian}
+        DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://mirrors.aliyun.com/debian-security}
+        PYPI_INDEX_URL: ${PYPI_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple}
+        UV_INDEX_URL: ${UV_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple}
+        ONNXRUNTIME_NODE_INSTALL_CUDA: ${ONNXRUNTIME_NODE_INSTALL_CUDA:-skip}
         http_proxy: ${HTTP_PROXY:-}
         https_proxy: ${HTTPS_PROXY:-}
         all_proxy: ${ALL_PROXY:-}
         no_proxy: ${NO_PROXY:-localhost,127.0.0.1}
-    image: qlcode-chat:${QLCODE_CHAT_DOCKER_TAG:-v0.9.7}
+    image: qlcode-chat:${QLCODE_CHAT_DOCKER_TAG:-v0.9.8}
     container_name: qlcode-chat
     volumes:
       - qlcode-chat:/app/backend/data
@@ -23,6 +29,24 @@ services:
       - ${QLCODE_CHAT_PORT-3000}:8080
     environment:
       - WEBUI_SECRET_KEY=${QLCODE_CHAT_SECRET_KEY:-}
+      - WEBUI_URL=${WEBUI_URL:-https://chat.qlcodeapi.com/}
+      - QLCODE_TUTORIAL_URL=${QLCODE_TUTORIAL_URL:-https://qlcodeapi.com/}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-qlcodeapi@qq.com}
+      - ENABLE_SIGNUP=${ENABLE_SIGNUP:-true}
+      - ENABLE_OLLAMA_API=${ENABLE_OLLAMA_API:-false}
+      - ENABLE_OPENAI_API=${ENABLE_OPENAI_API:-false}
+      - ENABLE_DIRECT_CONNECTIONS=${ENABLE_DIRECT_CONNECTIONS:-true}
+      - ENABLE_EMAIL_VERIFICATION=${ENABLE_EMAIL_VERIFICATION:-false}
+      - LOGIN_TERMS_ENABLED=${LOGIN_TERMS_ENABLED:-true}
+      - LOGIN_TERMS_DISPLAY_STYLE=${LOGIN_TERMS_DISPLAY_STYLE:-modal}
+      - LOGIN_TERMS_UPDATED_AT=${LOGIN_TERMS_UPDATED_AT:-2026-03-31}
+      - SMTP_HOST=${SMTP_HOST:-smtpdm.aliyun.com}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USERNAME=${SMTP_USERNAME:-no-reply@mail.qlcodeapi.com}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL:-no-reply@mail.qlcodeapi.com}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-QLCode API}
+      - SMTP_USE_TLS=${SMTP_USE_TLS:-true}
     extra_hosts:
       - host.docker.internal:host-gateway
     restart: unless-stopped
